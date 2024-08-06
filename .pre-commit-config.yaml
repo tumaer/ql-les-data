@@ -1,0 +1,25 @@
+default_language_version:
+  python: python3
+# https://stackoverflow.com/questions/75560681/how-to-exclude-multiple-directories-in-pre-commit
+exclude: |
+  (?x)^(
+      from_fortran/.*|
+      notebooks/.*|
+  )$
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-docstring-first
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: requirements-txt-fixer
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 'v0.2.2'
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+      - id: ruff-format

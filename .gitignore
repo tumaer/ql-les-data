@@ -1,2 +1,11 @@
 venv*/
+.venv/
 data*/
+.eggs/
+results*/
+.vscode/
+__pycache__/
+*.pyc
+*.pkl
+*.out
+.ruff-cache

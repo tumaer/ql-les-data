@@ -1,0 +1,68 @@
+# Input-parameter for cturb.
+job_id_ctr: iga960_run1  # job identification (character*50)
+taumax: 10.0  # maximum time (in delta_1/u_inf)
+itmax: 10  # maximum number of time steps
+ioutst: 10  # how often to checkpoint the field (AUSGABE)
+ianalout: 1  # how often to run analysis (ANALYSE)
+irunout: 1  # 
+dtauout: 0.0  # output after each dtauout time increment
+tauout_0: 0.0  # left border of time interval considered for output
+tauout_1: 5000.0  # right border of time interval considered for output
+cfl: 2.0  # Courant-Friedrichs-Lewy number
+tstufe_rq: -1.0  # 
+itstep_rq: -1  # 
+cyber:  # 
+    - false  # T : restart | F : new start
+    - false  # T : output controlled by time | F : ctrl by iterations
+    - false  # 
+    - false  # T : LES                        |  F : DNS
+    - false  # T : TG initial cond            |  F : spectrum initial cond
+    - false  # T : random noise on TG         |  F : no noise on TG
+    - false  # T : secondary filtering        |  F : no secondary filtering
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # 
+    - false  # T: open concurrent graphics  |  F: no concurrent graphics
+code_for:  # 
+    - No-Restart  # 
+    - DNS  # 
+    - " "  # 
+    - Spectral  # 
+    - Dealiasing  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 
+    - " "  # 

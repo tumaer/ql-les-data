@@ -1,0 +1,14 @@
+nx = 32
+ny = 32
+nz = 32
+nx2 = 32
+ny2 = 32
+nz2 = 32
+npmax = 32
+npx = nx + 2
+npy = ny + 2
+npz = nz + 2
+npx2 = nx2 + 2
+npy2 = ny2 + 2
+npz2 = nz2 + 2
+ncpu = 1
