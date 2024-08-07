@@ -1,4 +1,4 @@
-# Learned Lagrangian Large Eddy Simulation
+# Learned Lagrangian LES
 
 **This code contains:**
 
@@ -32,5 +32,5 @@ python main.py config=configs/hit.yaml
 For higher quality, run the following.
 
 ```bash
-nohup bash run.sh >> hit_196_5_0002.out 2>&1 &
+nohup bash run.sh >> hit_192_5_0002.out 2>&1 &
 ```

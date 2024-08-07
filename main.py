@@ -1,13 +1,14 @@
+import os
+
 from jax import config
 from omegaconf import OmegaConf
-
-from l3es.integrator import integrate
-from l3es.spectral_solver import simulate
 
 if __name__ == "__main__":
     cli_args = OmegaConf.from_cli()
     # TODO: add a check whether the cli_args are a subset of the defaults
     cfg = OmegaConf.merge(OmegaConf.load(cli_args.config), cli_args)
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu)
 
     if cfg.float64:
         config.update("jax_enable_x64", True)
@@ -16,6 +17,9 @@ if __name__ == "__main__":
     print(OmegaConf.to_yaml(cfg))
     print("#" * 79)
 
+    from l3es.integrator import integrate
+    from l3es.spectral_solver import simulate
+
     if cfg.mode == "simulate":
         simulate(
             case=cfg.sim.case,
@@ -23,6 +27,7 @@ if __name__ == "__main__":
             nu=cfg.sim.nu,
             t_final=cfg.sim.t_final,
             dt=cfg.sim.dt,
+            u_ref=cfg.sim.u_ref,
             seed=cfg.sim.seed,
             log_freq=cfg.sim.log_freq,
             vis_freq=cfg.sim.vis_freq,

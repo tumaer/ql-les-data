@@ -1,5 +1,6 @@
-float64: True
 mode: simulate  # [simulate, integrate]
+gpu: 0
+float64: True
 
 sim:
   case: "HIT"
@@ -7,6 +8,7 @@ sim:
   nu: 0.000625  # 1/1600=1/Re
   t_final: 2.0
   dt: 0.01
+  u_ref: 4.0
   seed: 42
   log_freq: 20
   vis_freq: 20

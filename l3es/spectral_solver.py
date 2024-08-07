@@ -88,6 +88,7 @@ def simulate(
     nu=0.000625,
     t_final=0.1,
     dt=0.01,
+    u_ref=1.0,
     seed=42,
     log_freq=20,
     vis_freq=10**8,
@@ -99,12 +100,13 @@ def simulate(
 
     Args:
         N (int): Grid size. Nx=Ny=Nz=N. Simulation time:
-            N=2**6=64  t_sim(steps=200)=1.46s, N=2**7=128 t_sim=3.55s, N=196 t_sim=22.2.
+            N=2**6=64  t_sim(steps=200)=1.46s, N=2**7=128 t_sim=3.55s, N=192 t_sim=22.2.
         nu (float): Viscosity = 1/Re. nu=0.000625 for Re=1600.
         t_final (float): Final time.
         dt (float): Integration time step. N=64, Re=1600: dt=0.031 last stable; computed
-            dt=0.027 (CFL=1.15); we use dt=0.01 (CFL=0.37).  N=196, Re=1600: computed
+            dt=0.027 (CFL=1.15); we use dt=0.01 (CFL=0.37).  N=192, Re=1600: computed
             dt=0.0087
+        u_ref (float): Reference velocity. Used for plotting and CFL computation.
         case (str): Simulation case. One of ["TGV", "HIT"].
         log_freq (int): How often to log simulation progress.
         vis_freq (int): How often to generate visualizations.
@@ -122,16 +124,18 @@ def simulate(
         u = init_u_hit(N, seed)
     u_hat = jnp.fft.rfftn(u, axes=(1, 2, 3))  # (3,N,N,N//2+1)
 
+    t0 = time()
     integrate_fn = rk4_wrapper(dt, rhs_wrapper(N, nu))
     integrate_fn = jit(integrate_fn)
     u, u_hat = integrate_fn(u, u_hat)
     u.block_until_ready()
+    print("Compilation time:", time() - t0)
 
     dst_vis = os.path.join(dst_path, "vis")
     dst_ckp = os.path.join(dst_path, "ckp")
     if vis_freq < 10**6:
         plot_e_k(u, 0, save_path=dst_vis)
-        plot_views(xyz, u, dx, 0, save_path=dst_vis)
+        plot_views(xyz, u, dx, 0, save_path=dst_vis, u_ref=u_ref)
     if ckp_freq < 10**6:
         write_u(u, 0, dst_ckp, ckp_N)
 
@@ -152,7 +156,7 @@ def simulate(
                 f"dt_est = {comp_dt(u, dx, nu):.5f}"
             )
         if tstep % vis_freq == 0:
-            plot_views(xyz, u, dx, tstep, save_path=dst_vis)
+            plot_views(xyz, u, dx, tstep, save_path=dst_vis, u_ref=u_ref)
             plot_e_k(u, tstep, save_path=dst_vis)
         if tstep % ckp_freq == 0:
             write_u(u, tstep, dst_ckp, ckp_N)

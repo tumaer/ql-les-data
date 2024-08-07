@@ -11,7 +11,7 @@ EPS = jnp.finfo(float).eps
 config.update("jax_enable_x64", True)
 
 
-def plot_views(xyz, u, dx, step, save_path=None, vmin=-4, vmax=4):
+def plot_views(xyz, u, dx, step, save_path=None, u_ref=4):
     x, y, z = xyz
 
     mask = (x > 2 * np.pi - 1.5 * dx) + (y < 0.5 * dx) + (z > 2 * np.pi - 1.5 * dx)
@@ -19,8 +19,8 @@ def plot_views(xyz, u, dx, step, save_path=None, vmin=-4, vmax=4):
     def subplot_i(fig, ind, c, lbl, vmin):
         ax = fig.add_subplot(1, 4, ind, projection="3d")
         ax.view_init(elev=25.0, azim=-35, roll=0)
-        cmp = "turbo"
-        ax.scatter(x[mask], y[mask], z[mask], c=c[mask], cmap=cmp, vmin=vmin, vmax=vmax)
+        cm = "turbo"
+        ax.scatter(x[mask], y[mask], z[mask], c=c[mask], cmap=cm, vmin=vmin, vmax=u_ref)
         ax.set_aspect("equal", "box")
         ax.set_title(lbl)
 
@@ -28,7 +28,7 @@ def plot_views(xyz, u, dx, step, save_path=None, vmin=-4, vmax=4):
     fig = plt.figure(figsize=(20, 5))
     fields = [u[0], u[1], u[2], np.linalg.norm(u, axis=0)]
     labels = ["ux", "uy", "uz", "|u|"]
-    vmins = [vmin, vmin, vmin, 0] if vmin is not None else [None] * 4
+    vmins = [-u_ref, -u_ref, -u_ref, 0]
     for i, (c, lbl, vmin_i) in enumerate(zip(fields, labels, vmins)):
         subplot_i(fig, i + 1, c, lbl, vmin_i)
 
