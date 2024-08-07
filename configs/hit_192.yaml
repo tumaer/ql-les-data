@@ -3,17 +3,17 @@ mode: simulate  # [simulate, integrate]
 
 sim:
   case: "HIT"
-  N: 128
+  N: 192
   nu: 0.000625  # 1/1600=1/Re
-  t_final: 2.0
-  dt: 0.01
+  t_final: 5.0
+  dt: 0.002
   seed: 42
-  log_freq: 20
-  vis_freq: 20
+  log_freq: 100
+  vis_freq: 100
   ckp_freq: 1
   ckp_N: 32
-  dst_path: "results_hit/"
+  dst_path: "results_hit_192/"
 
 int:
-  dst_path: "results_hit/"
+  dst_path: "results_hit_192/"
   splits: 8

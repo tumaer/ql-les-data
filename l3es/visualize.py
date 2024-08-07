@@ -28,7 +28,7 @@ def plot_views(xyz, u, dx, step, save_path=None, vmin=-4, vmax=4):
     fig = plt.figure(figsize=(20, 5))
     fields = [u[0], u[1], u[2], np.linalg.norm(u, axis=0)]
     labels = ["ux", "uy", "uz", "|u|"]
-    vmins = [vmin, vmin, vmin, vmin] if vmin is not None else [None] * 4
+    vmins = [vmin, vmin, vmin, 0] if vmin is not None else [None] * 4
     for i, (c, lbl, vmin_i) in enumerate(zip(fields, labels, vmins)):
         subplot_i(fig, i + 1, c, lbl, vmin_i)
 

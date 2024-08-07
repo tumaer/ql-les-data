@@ -28,3 +28,9 @@ To generate a dataset of 32^3 particles, we run spectral DNS on 128^3 and spectr
 ```bash
 python main.py config=configs/hit.yaml
 ```
+
+For higher quality, run the following.
+
+```bash
+nohup bash run.sh >> hit_196_5_0002.out 2>&1 &
+```

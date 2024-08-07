@@ -1,5 +1,6 @@
 """Core spectral DNS solver."""
 
+import os
 from time import time
 
 import jax.numpy as jnp
@@ -81,7 +82,7 @@ def comp_dt(u, dx, nu, cfl=1.0):
     return dt
 
 
-def simulate_wrapper(
+def simulate(
     case="TGV",
     N=64,
     nu=0.000625,
@@ -109,7 +110,7 @@ def simulate_wrapper(
         vis_freq (int): How often to generate visualizations.
         ckp_freq (int): How often to save the flow field.
         ckp_N (int): How many spatial modes to keep (after spectral filtering).
-        dst_path (str): Where to write results.
+        dst_path (str): Where to write results. (Destination path)
     """
 
     dx = 2 * np.pi / N
@@ -126,11 +127,13 @@ def simulate_wrapper(
     u, u_hat = integrate_fn(u, u_hat)
     u.block_until_ready()
 
+    dst_vis = os.path.join(dst_path, "vis")
+    dst_ckp = os.path.join(dst_path, "ckp")
     if vis_freq < 10**6:
-        plot_e_k(u, 0, save_path=dst_path)
-        plot_views(xyz, u, dx, 0, save_path=dst_path)
+        plot_e_k(u, 0, save_path=dst_vis)
+        plot_views(xyz, u, dx, 0, save_path=dst_vis)
     if ckp_freq < 10**6:
-        write_u(u, 0, dst_path, ckp_N)
+        write_u(u, 0, dst_ckp, ckp_N)
 
     print("#" * 79, f"\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}")
     t = 0.0
@@ -149,10 +152,10 @@ def simulate_wrapper(
                 f"dt_est = {comp_dt(u, dx, nu):.5f}"
             )
         if tstep % vis_freq == 0:
-            plot_views(xyz, u, dx, tstep, save_path=dst_path)
-            plot_e_k(u, tstep, save_path=dst_path)
+            plot_views(xyz, u, dx, tstep, save_path=dst_vis)
+            plot_e_k(u, tstep, save_path=dst_vis)
         if tstep % ckp_freq == 0:
-            write_u(u, tstep, dst_path, ckp_N)
+            write_u(u, tstep, dst_ckp, ckp_N)
         t_out += time() - t_temp
 
     t_tot = time() - t0
