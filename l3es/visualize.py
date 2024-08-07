@@ -11,15 +11,16 @@ EPS = jnp.finfo(float).eps
 config.update("jax_enable_x64", True)
 
 
-def plot_views(xyz, u, dx, step, save_path=None):
+def plot_views(xyz, u, dx, step, save_path=None, vmin=-4, vmax=4):
     x, y, z = xyz
 
     mask = (x > 2 * np.pi - 1.5 * dx) + (y < 0.5 * dx) + (z > 2 * np.pi - 1.5 * dx)
 
-    def subplot_i(fig, ind, c, lbl):
+    def subplot_i(fig, ind, c, lbl, vmin):
         ax = fig.add_subplot(1, 4, ind, projection="3d")
         ax.view_init(elev=25.0, azim=-35, roll=0)
-        ax.scatter(x[mask], y[mask], z[mask], c=c[mask], cmap="turbo")
+        cmp = "turbo"
+        ax.scatter(x[mask], y[mask], z[mask], c=c[mask], cmap=cmp, vmin=vmin, vmax=vmax)
         ax.set_aspect("equal", "box")
         ax.set_title(lbl)
 
@@ -27,12 +28,15 @@ def plot_views(xyz, u, dx, step, save_path=None):
     fig = plt.figure(figsize=(20, 5))
     fields = [u[0], u[1], u[2], np.linalg.norm(u, axis=0)]
     labels = ["ux", "uy", "uz", "|u|"]
-    for i, (c, lbl) in enumerate(zip(fields, labels)):
-        subplot_i(fig, i + 1, c, lbl)
+    vmins = [vmin, vmin, vmin, vmin] if vmin is not None else [None] * 4
+    for i, (c, lbl, vmin_i) in enumerate(zip(fields, labels, vmins)):
+        subplot_i(fig, i + 1, c, lbl, vmin_i)
 
     os.makedirs(save_path, exist_ok=True)
     if save_path:
         plt.savefig(os.path.join(save_path, f"step_{step}_view.png"))
+
+    plt.close()
 
 
 def plot_e_k(u, step, save_path=None):
@@ -69,3 +73,5 @@ def plot_e_k(u, step, save_path=None):
     os.makedirs(save_path, exist_ok=True)
     if save_path:
         fig.savefig(os.path.join(save_path, f"step_{step}_spectrum.png"))
+
+    plt.close()

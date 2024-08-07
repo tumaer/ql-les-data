@@ -1,0 +1,14 @@
+float64: True
+
+sim:
+  case: "HIT"
+  N: 128
+  nu: 0.000625  # 1/1600=1/Re
+  t_final: 2.0
+  dt: 0.01
+  seed: 42
+  log_freq: 20
+  vis_freq: 20
+  ckp_freq: 1
+  ckp_N: 32
+  dst_path: "results_hit/"

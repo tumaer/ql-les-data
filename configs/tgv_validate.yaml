@@ -1,0 +1,14 @@
+float64: True
+
+sim:
+  case: "TGV"
+  N: 64
+  nu: 0.000625  # 1/1600=1/Re
+  t_final: 0.1
+  dt: 0.01
+  seed: null
+  log_freq: 5
+  vis_freq: 5
+  ckp_freq: 5
+  ckp_N: 32
+  dst_path: "results_tgv_validate/"

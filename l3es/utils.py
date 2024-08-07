@@ -1,5 +1,7 @@
 """Utilities for L3ES."""
 
+import os
+
 import jax.numpy as jnp
 import numpy as np
 
@@ -78,3 +80,38 @@ def energy_spectrum(vel, mul_fac: float = 1.0, is_scalar_field: bool = False):
     ek *= 4 * jnp.pi * k**2 / (n_samples + EPS)
 
     return ek
+
+
+def write_u(u, tstep, dst_path, ckp_N):
+    """Write flow field to disk.
+
+    Args:
+        u (jnp.ndarray): Flow field with shape (3, N, N, N).
+        tstep (int): Current time step.
+        dst_path (str): Where to write results.
+        ckp_N (int): How many spatial modes to keep (after spectral filtering).
+    """
+
+    N_u = u.shape[1]
+    assert ckp_N <= N_u, "ckp_N must be less than or equal to N."
+    assert ckp_N % 2 == 0 and N_u % 2 == 0, "Only tested for even N and ckp_N."
+
+    if ckp_N == N_u:
+        y_ifft = u
+    else:  # Apply spectral coarsening
+        # FFT
+        y_fft = jnp.fft.fftn(u, axes=(3, 2, 1))  # (3, N, N, N)
+
+        # Cut high frequencies. (3, N, N, N) -> (3, ckp_N, ckp_N, ckp_N)
+        sl = slice(N_u // 2 - ckp_N // 2, N_u // 2 + ckp_N // 2)
+        y_fft_sub = jnp.fft.fftshift(y_fft, axes=(1, 2, 3))[:, sl, sl, sl]
+        y_fft_sub = jnp.fft.ifftshift(y_fft_sub, axes=(1, 2, 3))
+
+        # IFFT
+        y_ifft = jnp.fft.ifftn(y_fft_sub, axes=(3, 2, 1)) / (N_u / ckp_N) ** 3
+        y_ifft = y_ifft.real  # (3, ckp_N, ckp_N, ckp_N)
+
+    # Save to disk
+    os.makedirs(dst_path, exist_ok=True)
+    file_path = os.path.join(dst_path, f"u_{ckp_N}_{tstep:05d}.npy")
+    np.save(file_path, y_ifft)
