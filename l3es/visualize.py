@@ -14,7 +14,8 @@ config.update("jax_enable_x64", True)
 def plot_views(xyz, u, dx, step, save_path=None, u_ref=4):
     x, y, z = xyz
 
-    mask = (x > 2 * np.pi - 1.5 * dx) + (y < 0.5 * dx) + (z > 2 * np.pi - 1.5 * dx)
+    # x axis - bottom left, y axis - center, z axis - vertical
+    mask = (x > 2 * np.pi - dx) + (y < dx) + (z > 2 * np.pi - dx)
 
     def subplot_i(fig, ind, c, lbl, vmin):
         ax = fig.add_subplot(1, 4, ind, projection="3d")
@@ -22,7 +23,7 @@ def plot_views(xyz, u, dx, step, save_path=None, u_ref=4):
         cm = "turbo"
         ax.scatter(x[mask], y[mask], z[mask], c=c[mask], cmap=cm, vmin=vmin, vmax=u_ref)
         ax.set_aspect("equal", "box")
-        ax.set_title(lbl)
+        ax.set_title(f"{lbl} (min={c.min():.2f}, max={c.max():.2f})")
 
     # plot results
     fig = plt.figure(figsize=(20, 5))

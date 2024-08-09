@@ -2,10 +2,16 @@
 
 **This code contains:**
 
-- [x] Spectral HIT solver. Based on  https://github.com/spectralDNS/spectralDNS
-- [ ] Evolution of SPH particles following spectral dynamics
+- [x] Spectral HIT solver. Based on https://github.com/spectralDNS/spectralDNS
+- [ ] Set up case
+    - [ ] CBC initial conditions
+    - [ ] forces turbulence
+    - [ ] enforce Re_lambda, see https://www.sto.nato.int/publications/AGARD/AGARD-AR-345/AGARD-AR-345.pdf
+- [x] Evolution of SPH particles following spectral dynamics
 - [ ] Dataset generation utils
 - [ ] Evaluation metrics
+    - [ ] Jonas' MLS interpolation
+    - [x] direct DFT on points to compute spectrum
 
 ## Install
 
