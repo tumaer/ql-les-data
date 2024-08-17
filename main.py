@@ -24,6 +24,7 @@ if __name__ == "__main__":
         simulate(
             case=cfg.sim.case,
             N=cfg.sim.N,
+            dim=cfg.sim.dim,
             nu=cfg.sim.nu,
             t_final=cfg.sim.t_final,
             dt=cfg.sim.dt,
@@ -42,8 +43,10 @@ if __name__ == "__main__":
             src_path=cfg.sim.dst_path,
             dst_path=cfg.int.dst_path,
             N=cfg.sim.ckp_N,
+            dim=cfg.sim.dim,
             dt=cfg.sim.dt,
             splits=cfg.int.splits,
+            u_ref=cfg.sim.u_ref,
         )
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")

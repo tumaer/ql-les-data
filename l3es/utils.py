@@ -25,12 +25,13 @@ def get_real_wavenumber_grid(n, dim):
     return k_field, k_vec
 
 
-def energy_spectrum(vel, mul_fac: float = 1.0, is_scalar_field: bool = False):
+def energy_spectrum(vel, mul_fac: float = 1.0, is_scalar_field: bool = False, dim=3):
     """JAX implemented energy spectrum computation on a grid.
 
-    Code based on JAX-FLUIDS 1.0 implementation."""
+    Adapted from JAX-FLUIDS 1.0 implementation."""
 
-    dim = vel.shape[0]
+    if dim == 2:
+        vel = vel[:2, :, :, 0]
     ns = vel.shape[1:]
 
     # check for square box with equal side length
@@ -64,7 +65,7 @@ def energy_spectrum(vel, mul_fac: float = 1.0, is_scalar_field: bool = False):
     shell = (k_field_norm + 0.5).astype(int).flatten()
 
     # fourier transform prefactor
-    vel_hat /= n**3
+    vel_hat /= n**dim
 
     # calculate energy
     abs_energy = jnp.sum(jnp.abs(vel_hat**2), axis=0)
@@ -82,34 +83,66 @@ def energy_spectrum(vel, mul_fac: float = 1.0, is_scalar_field: bool = False):
     return ek
 
 
+def spectral_filtering(u, ckp_N):
+    """Spectral filtering for LES reference data.
+
+    Args:
+        u (jnp.ndarray): Flow field with shape (3, N, N, N) or (2, N, N).
+        ckp_N (int): How many spatial modes to keep (after spectral filtering).
+
+    Returns:
+        jnp.ndarray: Flow field of shape (3, ckp_N, ckp_N, ckp_N) or (2, ckp_N, ckp_N).
+    """
+
+    N_u = u.shape[1]
+    dim = len(u)
+    fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
+
+    # FFT
+    y_fft = jnp.fft.fftn(u, axes=fft_axes)  # (3, N, N, N)  TODO: this was (3,2,1)
+
+    # Cut high frequencies. (3, N, N, N) -> (3, ckp_N, ckp_N, ckp_N)
+    sl = slice(N_u // 2 - ckp_N // 2, N_u // 2 + ckp_N // 2)
+    slices = tuple([slice(None)] + [sl] * dim)
+    y_fft_sub = jnp.fft.fftshift(y_fft, axes=fft_axes)[slices]
+    y_fft_sub = jnp.fft.ifftshift(y_fft_sub, axes=fft_axes)
+
+    # IFFT
+    # TODO: this was (3,2,1)
+    y_ifft = jnp.fft.ifftn(y_fft_sub, axes=fft_axes) / (N_u / ckp_N) ** dim
+    y_ifft = y_ifft.real  # (3, ckp_N, ckp_N, ckp_N)
+
+    # # Orientation changes during spectral filtering from DNS to LES grid
+    # import matplotlib.pyplot as plt
+    # _, axs = plt.subplots(1, 2, figsize=(10, 5))
+    # axs[0].imshow(u[0])
+    # axs[1].imshow(y_ifft[0])
+    # plt.savefig("orientation_check.png")
+
+    return y_ifft
+
+
 def write_u(u, tstep, dst_path, ckp_N):
     """Write flow field to disk.
 
     Args:
-        u (jnp.ndarray): Flow field with shape (3, N, N, N).
+        u (jnp.ndarray): Flow field with shape (3, N, N, N) or (3, N, N, 1).
         tstep (int): Current time step.
         dst_path (str): Where to write results.
         ckp_N (int): How many spatial modes to keep (after spectral filtering).
+
+    Writes:
+        u_{ckp_N}_{tstep:05d}.npy: Flow field of shape (3, N_sub, N_sub, N_sub) or
+            (2, N_sub, N_sub)
     """
 
     N_u = u.shape[1]
+    dim = 2 if u.shape[-1] == 1 else 3
+    u = u if dim == 3 else u[:2, :, :, 0]
     assert ckp_N <= N_u, "ckp_N must be less than or equal to N."
     assert ckp_N % 2 == 0 and N_u % 2 == 0, "Only tested for even N and ckp_N."
 
-    if ckp_N == N_u:
-        y_ifft = u
-    else:  # Apply spectral coarsening
-        # FFT
-        y_fft = jnp.fft.fftn(u, axes=(3, 2, 1))  # (3, N, N, N)
-
-        # Cut high frequencies. (3, N, N, N) -> (3, ckp_N, ckp_N, ckp_N)
-        sl = slice(N_u // 2 - ckp_N // 2, N_u // 2 + ckp_N // 2)
-        y_fft_sub = jnp.fft.fftshift(y_fft, axes=(1, 2, 3))[:, sl, sl, sl]
-        y_fft_sub = jnp.fft.ifftshift(y_fft_sub, axes=(1, 2, 3))
-
-        # IFFT
-        y_ifft = jnp.fft.ifftn(y_fft_sub, axes=(3, 2, 1)) / (N_u / ckp_N) ** 3
-        y_ifft = y_ifft.real  # (3, ckp_N, ckp_N, ckp_N)
+    y_ifft = u if ckp_N == N_u else spectral_filtering(u, ckp_N)
 
     # Save to disk
     os.makedirs(dst_path, exist_ok=True)

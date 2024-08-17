@@ -5,6 +5,7 @@ float64: True
 sim:
   case: "HIT"
   N: 192
+  dim: 3
   nu: 0.000625  # 1/1600=1/Re
   t_final: 5.0
   dt: 0.002

@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax_sph.io_state import write_h5, write_vtk
-from jax_sph.utils import pos_init_cartesian_3d
+from jax_sph.utils import pos_init_cartesian_2d, pos_init_cartesian_3d
 
 from l3es.turbulence import ur_to_u_dft_wrapper
 from l3es.visualize import plot_e_k, plot_views
@@ -23,22 +23,23 @@ def shift_fn(r, dr, box_size=2 * np.pi):
     return (r + dr) % box_size
 
 
-def spectral_interpolator_wrapper(N, splits=128):
+def spectral_interpolator_wrapper(N, fft_axes=(1, 2, 3), splits=128):
     k = np.fft.fftshift(np.fft.fftfreq(N, 1.0 / N))
-    k_field = np.array(np.meshgrid(k, k, k, indexing="xy"), dtype=int)  # (3, N, N, N)
+    k_tuple = (k, k, k) if len(fft_axes) == 3 else (k, k)
+    k_field = np.array(np.meshgrid(*k_tuple, indexing="ij"), dtype=int)  # (3, N, N, N)
 
     assert splits & (splits - 1) == 0, "Splits must be a power of 2"
 
     def interpolate(u, r):
-        # u.shape = (3, N, N, N), r.shape - (N^3, 3)
+        # u.shape = (3, N, N, N) or (2, N, N), r.shape - (N^3, 3)
 
-        u_hat = jnp.fft.fftn(u, axes=(3, 2, 1))  # (3, N, N, N)
-        u_hat = jnp.fft.fftshift(u_hat, axes=(1, 2, 3))
+        u_hat = jnp.fft.fftn(u, axes=fft_axes)  # (3, N, N, N)
+        u_hat = jnp.fft.fftshift(u_hat, axes=fft_axes)
 
         def idft(carry, x_i):
             # 2 pi / L = 1
-            exponent = jnp.exp(1j * (k_field * x_i[:, None, None, None]).sum(axis=0))
-            res = jnp.real(jnp.mean(u_hat * exponent, axis=(1, 2, 3)))
+            exponent = jnp.exp(1j * ((k_field.T * x_i).T).sum(axis=0))
+            res = jnp.real(jnp.mean(u_hat * exponent, axis=fft_axes))
             return None, res
 
         ### Version 1: Runtime on N=32 with vs without jit: 6s vs 35s
@@ -73,16 +74,25 @@ def spectral_interpolator_wrapper(N, splits=128):
 # plot_views((r.T).reshape(3,N,N,N), (u_r.T).reshape(3,N,N,N), L/N, step, save_path=vis_path)
 
 
-def integrate(src_path, dst_path, N=32, dt=0.01, splits=8):
+def my_imshow(ax, u, vmin, vmax):
+    ax.imshow(u.T, origin="lower", cmap="turbo", vmin=vmin, vmax=vmax)
+    ax.set_title(f"ux (min={u.min():.2f}, max={u.max():.2f})")
+
+
+def integrate(src_path, dst_path, N=32, dim=3, dt=0.01, splits=8, u_ref=4.0):
     """Integrate SPH particles along prescribed velocity field.
 
     Args:
         src_path (str): Path to the directory with the checkpoints. (Source path)
         dst_path (str): Path to the directory where the integrated files will be saved.
         N (int): Number of particles in each dimension.
+        dim (int): Dimension.
         dt (float): Time step.
         splits (int): Into how many parts to split 'r' before vmap-ing.
     """
+    L = 2 * np.pi
+    fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
+
     ckp_path = os.path.join(src_path, "ckp")
     files = get_ckps_list(ckp_path)
 
@@ -90,12 +100,12 @@ def integrate(src_path, dst_path, N=32, dt=0.01, splits=8):
     int_path = os.path.join(dst_path, "int")
     os.makedirs(int_path, exist_ok=True)
 
-    r = pos_init_cartesian_3d(2 * np.pi * np.ones(3), 2 * np.pi / N)
+    if dim == 3:
+        r = pos_init_cartesian_3d(L * np.ones(3), L / N)
+    else:
+        r = pos_init_cartesian_2d(L * np.ones(2), L / N)
 
-    L = 2 * np.pi
-    dx = L / N
-
-    interpolator = spectral_interpolator_wrapper(N, splits=8)
+    interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=8)
     t0 = time()
     t_int = 0.0
     for i, file in enumerate(files):
@@ -105,6 +115,13 @@ def integrate(src_path, dst_path, N=32, dt=0.01, splits=8):
         # r_eval = (r-dx/2) % L  # TODO: shift r by dx/2?
         u_r = interpolator(u, r)
         t_int += time() - t_temp
+
+        # import matplotlib.pyplot as plt
+        # _, axs = plt.subplots(1, 2, figsize=(10, 5))
+        # my_imshow(axs[0], u[0, :, :], -u_ref, u_ref)
+        # axs[1].scatter(r[:,0], r[:,1], s=36 * (32 / N) ** 2, c=u_r[:,0], cmap="turbo", vmin=-u_ref, vmax=u_ref)
+        # axs[1].set_title(f"u_r_x (min={u_r[:,0].min():.2f}, max={u_r[:,0].max():.2f})")
+        # plt.savefig("orientation_check.png")
 
         #########################
 
@@ -141,13 +158,18 @@ def integrate(src_path, dst_path, N=32, dt=0.01, splits=8):
         write_vtk({"r": r, "u": u_r}, os.path.join(int_path, f"step_{i:05d}.vtk"))
 
         if i % 100 == 0:
-            r_vis = (r.T).reshape(3, N, N, N)
-            u_vis = (u_r.T).reshape(3, N, N, N)
-            plot_views(r_vis, u_vis, L / N, i, save_path=vis_path, u_ref=4.0)
-
-            u_grid = ur_to_u_dft_wrapper(N, L)(r, u_r)  # TODO: shift r by dx/2?
-            u_grid = np.asarray((u_grid.T).reshape(3, N, N, N))
-            plot_e_k(u_grid, i, save_path=vis_path)
+            r_vis = (r.T).reshape(*u.shape)
+            u_vis = (u_r.T).reshape(*u.shape)
+            if dim == 2:
+                r_vis = np.vstack([r_vis, np.zeros_like(r_vis[:1])])[:, :, :, None]
+                u_vis = np.vstack([u_vis, np.zeros_like(u_vis[:1])])[:, :, :, None]
+            plot_views(r_vis, u_vis, L / N, i, save_path=vis_path, u_ref=u_ref)
+            # TODO: shift r by dx/2?
+            u_grid = ur_to_u_dft_wrapper(N, L, dim, fft_axes)(r, u_r)
+            u_grid = np.asarray((u_grid.T).reshape(*u.shape))
+            if dim == 2:
+                u_grid = np.vstack([u_grid, np.zeros_like(u_grid[:1])])[:, :, :, None]
+            plot_e_k(u_grid, i, save_path=vis_path, dim=dim)
 
         r = shift_fn(r, dt * u_r)
 

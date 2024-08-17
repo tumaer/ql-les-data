@@ -1,5 +1,7 @@
 import jax.numpy as jnp
+import jax_cfd.base as cfd
 import numpy as np
+from jax import random
 
 EPS = jnp.finfo(float).eps
 
@@ -67,3 +69,18 @@ def init_u_hit(N, seed=42):
     # transform to real space
     u = jnp.fft.irfftn(u.transpose(3, 0, 1, 2), axes=(-1, -2, -3), norm="forward")
     return u
+
+
+def init_u_kolm(N, L=2 * np.pi, max_velocity=7, seed=42, target_dim=3):
+    """Kolgomorov 2D field initialization. Based on
+    https://github.com/google/jax-cfd/blob/c31e6b94e4ad3b1b7aa8c3c86cd77ea0b8779e7a/notebooks/spectral_forced_turbulence.ipynb
+    """
+    grid = cfd.grids.Grid((N, N), domain=((0, L), (0, L)))
+    v0 = cfd.initial_conditions.filtered_velocity_field(
+        random.PRNGKey(seed), grid, max_velocity, 4
+    )
+    v0 = jnp.array([v.data for v in v0]).reshape(2, N, N, 1)
+
+    if target_dim == 3:
+        v0 = jnp.concatenate([v0, jnp.zeros((1, N, N, 1))], axis=0)
+    return v0

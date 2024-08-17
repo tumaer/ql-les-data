@@ -5,6 +5,7 @@ float64: True
 sim:
   case: "TGV"
   N: 64
+  dim: 3
   nu: 0.000625  # 1/1600=1/Re
   t_final: 0.1
   dt: 0.01
