@@ -6,9 +6,9 @@ sim:
   case: "Kolm"
   N: 256
   dim: 2
-  nu: 0.001  # 1/1600=1/Re
+  nu: 0.001  # from JAX-CFD
   t_final: 1.0
-  dt: 0.001  # 0.00173 was computed
+  dt: 0.001  # h/11U = 2pi/32/(11*7) = 0.00255 => 0.001  (0.00175 in JAX-CFD)
   u_ref: 7.0
   seed: 42
   log_freq: 100
@@ -19,4 +19,5 @@ sim:
 
 int:
   dst_path: "results_kolm/"
+  state_0_path: "data_relaxed/tgv_2_0.03125_42.h5"
   splits: 8

@@ -42,6 +42,7 @@ if __name__ == "__main__":
         integrate(
             src_path=cfg.sim.dst_path,
             dst_path=cfg.int.dst_path,
+            state_0_path=cfg.int.state_0_path,
             N=cfg.sim.ckp_N,
             dim=cfg.sim.dim,
             dt=cfg.sim.dt,

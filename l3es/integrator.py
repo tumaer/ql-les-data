@@ -4,7 +4,7 @@ from time import time
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax_sph.io_state import write_h5, write_vtk
+from jax_sph.io_state import read_h5, write_h5, write_vtk
 from jax_sph.utils import pos_init_cartesian_2d, pos_init_cartesian_3d
 
 from l3es.turbulence import ur_to_u_dft_wrapper
@@ -79,7 +79,9 @@ def my_imshow(ax, u, vmin, vmax):
     ax.set_title(f"ux (min={u.min():.2f}, max={u.max():.2f})")
 
 
-def integrate(src_path, dst_path, N=32, dim=3, dt=0.01, splits=8, u_ref=4.0):
+def integrate(
+    src_path, dst_path, state_0_path=None, N=32, dim=3, dt=0.01, splits=8, u_ref=4.0
+):
     """Integrate SPH particles along prescribed velocity field.
 
     Args:
@@ -100,10 +102,13 @@ def integrate(src_path, dst_path, N=32, dim=3, dt=0.01, splits=8, u_ref=4.0):
     int_path = os.path.join(dst_path, "int")
     os.makedirs(int_path, exist_ok=True)
 
-    if dim == 3:
-        r = pos_init_cartesian_3d(L * np.ones(3), L / N)
+    if state_0_path is not None:
+        r = read_h5(state_0_path)["r"]
     else:
-        r = pos_init_cartesian_2d(L * np.ones(2), L / N)
+        if dim == 3:
+            r = pos_init_cartesian_3d(L * np.ones(3), L / N)
+        else:
+            r = pos_init_cartesian_2d(L * np.ones(2), L / N)
 
     interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=8)
     t0 = time()

@@ -139,22 +139,6 @@ def simulate(
         u = init_u_kolm(N, target_dim=3)
     u_hat = jnp.fft.rfftn(u, axes=fft_axes).squeeze()  # (3,N,N,N//2+1)
 
-    # a1 = np.random.rand(4,4)
-    # a2 = a1.reshape((4,4,1))
-    # b1 = np.fft.rfftn(a1, axes=(0,1))
-    # b2 = np.fft.rfftn(a2, axes=(0,1))
-    # # b1 = np.fft.fftn(a1, axes=(0,1))
-    # # b2 = np.fft.fftn(a2, axes=(0,1,2))
-    # for abc in [a1, a2, b1, b2]:
-    #     print(abc.shape)
-    # c1 = np.fft.irfftn(b1, axes=(0,1))
-    # c2 = np.fft.irfftn(b2, axes=(0,1))
-    # # c1 = np.fft.ifftn(b1, axes=(0,1))
-    # # c2 = np.fft.ifftn(b2, axes=(0,1,2))
-    # for abc in [c1, c2]:
-    #     print(abc.shape)
-    # print(np.isclose(a1, c1).all(), np.isclose(a2, c2).all())
-
     t0 = time()
     integrate_fn = rk4_wrapper(dt, rhs_wrapper(N, nu, fft_axes), fft_axes)
     integrate_fn = jit(integrate_fn)

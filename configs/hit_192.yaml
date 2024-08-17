@@ -19,4 +19,5 @@ sim:
 
 int:
   dst_path: "results_hit_192/"
+  state_0_path: "data_relaxed/tgv_3_0.19634954_42.h5"
   splits: 8
