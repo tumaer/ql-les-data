@@ -8,6 +8,7 @@ from jax_sph.io_state import read_h5, write_h5, write_vtk
 from jax_sph.utils import pos_init_cartesian_2d, pos_init_cartesian_3d
 
 from l3es.turbulence import ur_to_u_dft_wrapper
+from l3es.utils import rho_computer
 from l3es.visualize import plot_e_k, plot_views
 
 
@@ -110,6 +111,7 @@ def integrate(
         else:
             r = pos_init_cartesian_2d(L * np.ones(2), L / N)
 
+    comp_rho = rho_computer(N, dim=dim, L=L)
     interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=8)
     t0 = time()
     t_int = 0.0
@@ -168,7 +170,8 @@ def integrate(
             if dim == 2:
                 r_vis = np.vstack([r_vis, np.zeros_like(r_vis[:1])])[:, :, :, None]
                 u_vis = np.vstack([u_vis, np.zeros_like(u_vis[:1])])[:, :, :, None]
-            plot_views(r_vis, u_vis, L / N, i, save_path=vis_path, u_ref=u_ref)
+            rho = comp_rho(r).reshape(*u.shape[1:])
+            plot_views(r_vis, u_vis, L / N, i, rho, save_path=vis_path, u_ref=u_ref)
             # TODO: shift r by dx/2?
             u_grid = ur_to_u_dft_wrapper(N, L, dim, fft_axes)(r, u_r)
             u_grid = np.asarray((u_grid.T).reshape(*u.shape))

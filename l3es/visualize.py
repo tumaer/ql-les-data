@@ -14,7 +14,7 @@ config.update("jax_enable_x64", True)
 plt.rcParams.update({"font.size": 14})
 
 
-def plot_views(xyz, u, dx, step, save_path=None, u_ref=4):
+def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4):
     """Scatter plot of the flow field
 
     Args:
@@ -34,34 +34,38 @@ def plot_views(xyz, u, dx, step, save_path=None, u_ref=4):
         mask = (x > 2 * np.pi - 1.4 * dx) + (y < 1.4 * dx) + (z > 2 * np.pi - 1.4 * dx)
         xyz_ = (x[mask], y[mask], z[mask])
 
-        fields = [u[0], u[1], u[2], np.linalg.norm(u, axis=0)]
-        labels = ["ux", "uy", "uz", "|u|"]
-        vmins = [-u_ref, -u_ref, -u_ref, 0]
+        fields = [u[0], rho, np.linalg.norm(u, axis=0)]
+        labels = ["ux", "rho", "|u|"]
+        vmins = [-u_ref, 0.95, 0]
+        vmaxs = [u_ref, 1.05, u_ref]
     else:
         projection = None
         mask = np.ones_like(x[..., 0], dtype=bool)
         xyz_ = (x, y)
         u = u.squeeze()
 
-        fields = [u[0], u[1], np.linalg.norm(u, axis=0)]
-        labels = ["ux", "uy", "|u|"]
-        vmins = [-u_ref, -u_ref, 0]
+        fields = [u[0], rho, np.linalg.norm(u, axis=0)]
+        labels = ["ux", "rho", "|u|"]
+        vmins = [-u_ref, 0.95, 0]
+        vmaxs = [u_ref, 1.05, u_ref]
 
     size = 36 * (32 / x.shape[0]) ** 2
 
-    def subplot_i(ax, ind, c, lbl, vmin):
+    def subplot_i(ax, c, lbl, vmin, vmax):
+        if c is None:
+            return
         if dim == 3:
             ax.view_init(elev=25.0, azim=-35, roll=0)
-        ax.scatter(*xyz_, c=c[mask], cmap="turbo", s=size, vmin=vmin, vmax=u_ref)
+        ax.scatter(*xyz_, c=c[mask], cmap="turbo", s=size, vmin=vmin, vmax=vmax)
         ax.set_aspect("equal", "box")
         ax.set_title(f"{lbl} (min={c.min():.2f}, max={c.max():.2f})")
 
     # plot results
     fig, axs = plt.subplots(
-        1, dim + 1, subplot_kw=dict(projection=projection), figsize=((dim + 1) * 5, 5)
+        1, 3, subplot_kw=dict(projection=projection), figsize=(15, 5)
     )
-    for i, (ax, c, lbl, vmin_i) in enumerate(zip(axs, fields, labels, vmins)):
-        subplot_i(ax, i + 1, c, lbl, vmin_i)
+    for i, (ax, c, lbl, vn, vx) in enumerate(zip(axs, fields, labels, vmins, vmaxs)):
+        subplot_i(ax, c, lbl, vn, vx)
     fig.tight_layout(pad=2)
 
     os.makedirs(save_path, exist_ok=True)

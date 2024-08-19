@@ -4,6 +4,11 @@ import os
 
 import jax.numpy as jnp
 import numpy as np
+from jax import jit, ops, vmap
+from jax_sph.jax_md import space
+from jax_sph.kernel import QuinticKernel
+from jax_sph.partition import neighbor_list
+from jax_sph.utils import pos_init_cartesian_2d, pos_init_cartesian_3d
 
 EPS = jnp.finfo(float).eps
 
@@ -148,3 +153,55 @@ def write_u(u, tstep, dst_path, ckp_N):
     os.makedirs(dst_path, exist_ok=True)
     file_path = os.path.join(dst_path, f"u_{ckp_N}_{tstep:05d}.npy")
     np.save(file_path, y_ifft)
+
+
+def rho_computer(N, dim=3, L=2 * np.pi):
+    """Compute density from coordinates or from a rollout file.
+
+    Args:
+        N (int): Number of particles per dimension.
+        dim (int): Dimension.
+        L (float): Box size.
+
+    Returns:
+        Callable which takes coordinates `r` and returns density `rho`.
+    """
+
+    N_tot = N**dim
+    dx = L / N
+    mass = dx**dim
+    box_size = np.ones(dim) * L
+    displacement_fn, _ = space.periodic(side=box_size)
+    kernel_fn = QuinticKernel(h=dx, dim=dim)
+
+    # set up neighbor search routine
+    if dim == 3:
+        pos_demo = pos_init_cartesian_3d(box_size, dx)
+    else:
+        pos_demo = pos_init_cartesian_2d(box_size, dx)
+    neighbor_fn = neighbor_list(
+        displacement_fn,
+        box_size,
+        backend="jaxmd_vmap",
+        r_cutoff=kernel_fn.cutoff,
+        capacity_multiplier=2.0,
+        mask_self=False,
+        num_particles_max=N_tot,
+        pbc=[True] * dim,
+    )
+    nbrs = neighbor_fn.allocate(pos_demo, num_particles=N_tot)
+    nbrs_update = jit(nbrs.update)
+
+    def comp_rho(r):
+        nbrs = nbrs_update(r, num_particles=N_tot)
+        i_s, j_s = nbrs.idx
+        r_i_s, r_j_s = r[i_s], r[j_s]
+        dr_i_j = vmap(displacement_fn)(r_i_s, r_j_s)
+        dist = space.distance(dr_i_j)
+        w_dist = vmap(kernel_fn.w)(dist)
+
+        rho = mass * ops.segment_sum(w_dist, i_s, N_tot)  # density summation
+        # rho = jnp.where(rho < 0.98, 1, rho)  # detect free surface
+        return rho
+
+    return comp_rho
