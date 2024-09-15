@@ -205,3 +205,25 @@ def rho_computer(N, dim=3, L=2 * np.pi):
         return rho
 
     return comp_rho
+
+
+def comp_divergence(u, dx, version=2):
+    """Computes divergence of vector field
+    u (array) -> vector field components [Fx,Fy,Fz,...]
+    dx (float) -> spacing between points in every directions
+    """
+    if version == 0:
+        num_dims = len(u)
+        return np.ufunc.reduce(
+            np.add, [np.gradient(u[i], dx, axis=i) for i in range(num_dims)]
+        )
+    elif version == 1:
+        dudx = np.gradient(u[0], dx, axis=0)
+        dvdy = np.gradient(u[1], dx, axis=1)
+        return dudx + dvdy
+    elif version == 2:  # this version by construction zeros out the boundaries
+        res = np.zeros_like(u[0])
+        res[1:-1, 1:-1] = (
+            u[0, 2:, 1:-1] - u[0, :-2, 1:-1] + u[1, 1:-1, 2:] - u[1, 1:-1, :-2]
+        ) / (2 * dx)
+        return res

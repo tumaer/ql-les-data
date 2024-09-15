@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from jax import config
 
-from l3es.utils import energy_spectrum
+from l3es.utils import comp_divergence, energy_spectrum
 
 EPS = jnp.finfo(float).eps
 config.update("jax_enable_x64", True)
@@ -44,10 +44,17 @@ def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4):
         xyz_ = (x, y)
         u = u.squeeze()
 
-        fields = [u[0], rho, np.linalg.norm(u, axis=0)]
         labels = ["ux", "rho", "|u|"]
         vmins = [-u_ref, 0.95, 0]
         vmaxs = [u_ref, 1.05, u_ref]
+
+        if rho is None:
+            rho = comp_divergence(u, dx, version=2)
+            labels = ["ux", "div", "|u|"]
+            vmins = [-u_ref, None, 0]
+            vmaxs = [u_ref, None, u_ref]
+
+        fields = [u[0], rho, np.linalg.norm(u, axis=0)]
 
     size = 36 * (32 / x.shape[0]) ** 2
 

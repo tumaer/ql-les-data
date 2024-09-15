@@ -6,7 +6,7 @@ from time import time
 import jax.numpy as jnp
 from jax import config, jit
 
-from l3es.init_fields import init_u_hit, init_u_kolm, init_u_tgv
+from l3es.init_fields import init_u_hit, init_u_kolm, init_u_tgv, init_u_tgv2d
 from l3es.utils import write_u
 from l3es.visualize import plot_e_k, plot_views
 
@@ -137,7 +137,69 @@ def simulate(
         u = init_u_hit(N, seed)
     elif case == "Kolm":
         u = init_u_kolm(N, target_dim=3)
+    elif case == "TGV2D":
+        u = init_u_tgv2d(N, target_dim=3, rescale=L)
     u_hat = jnp.fft.rfftn(u, axes=fft_axes).squeeze()  # (3,N,N,N//2+1)
+
+    ######################################################################
+
+    # import numpy as np
+    # import matplotlib.pyplot as plt
+    # from l3es.utils import spectral_filtering
+
+    # u_ = np.asarray(u[:2, :, :, 0])
+    # u_filtered = np.asarray(spectral_filtering(u_, ckp_N))
+    # print(div_in_spectral_space(u_), div_in_spectral_space(u_filtered))
+
+    # def comp_divergence(u, L=2 * jnp.pi, version=1):
+    #     """Numerically evaluate the divergence of a vector field."""
+    #     res = np.zeros_like(u[0])
+    #     N = u.shape[1]
+    #     dx = dy = L / N
+    #     print("#1", u.shape)
+    #     if version == 1:
+    #         res[1:-1,1:-1] = (
+    #             u[0, 2:, 1:-1] - u[0, :-2, 1:-1]
+    #             + u[1, 1:-1, 2:] - u[1, 1:-1, :-2]
+    #         ) / (2 * dx)
+    #     elif version == 2:
+    #         res = np.ufunc.reduce(np.add, [np.gradient(u[i], dx, axis=i) for i in range(len(u))])
+    #     elif version == 3:
+    #         # Extract x and y components of velocity
+    #         u, v = u
+    #         # Compute partial derivatives using central difference
+    #         dudx = (u[2:, 1:-1] - u[:-2, 1:-1]) / (2 * dx)  # du/dx
+    #         dvdy = (v[1:-1, 2:] - v[1:-1, :-2]) / (2 * dy)  # dv/dy
+    #         # Compute divergence in the central region of the grid
+    #         res = np.zeros_like(u)
+    #         res[1:-1, 1:-1] = dudx + dvdy
+    #     elif version == 4:
+    #         dudx = np.gradient(u[0], dx, axis=0)
+    #         dvdy = np.gradient(u[1], dx, axis=1)
+    #         res = dudx + dvdy
+
+    #     print("#2", res.shape)
+    #     return res
+
+    # fig, axs = plt.subplots(3, 2, figsize=(10, 15))
+    # plt.suptitle(f"Left ({N}x{N}) vs. Right ({ckp_N}x{ckp_N})")
+    # for i, title in enumerate(["u_x", "u_y"]):
+    #     axs[i, 0].imshow(u_[i], cmap="turbo")
+    #     axs[i, 0].set_title(f"{title} (min={u_[i].min():.2f}, max={u_[i].max():.2f})")
+    #     axs[i, 1].imshow(u_filtered[i], cmap="turbo")
+    #     axs[i, 1].set_title(f"{title} (min={u_filtered[i].min():.2f}, max={u_filtered[i].max():.2f})")
+
+    # version = 4
+    # div_ = comp_divergence(u_, version=version)
+    # axs[2, 0].imshow(div_, cmap="turbo")
+    # axs[2, 0].set_title(f"Div (min={div_.min():.2f}, max={div_.max():.2f})")
+    # div_filtered = comp_divergence(u_filtered, version=version)
+    # axs[2, 1].imshow(div_filtered, cmap="turbo")
+    # axs[2, 1].set_title(f"Div (min={div_filtered.min():.2f}, max={div_filtered.max():.2f})")
+
+    # plt.savefig("divergence.png")
+    # plt.close()
+    ######################################################################
 
     t0 = time()
     integrate_fn = rk4_wrapper(dt, rhs_wrapper(N, nu, fft_axes), fft_axes)

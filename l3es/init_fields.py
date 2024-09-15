@@ -1,7 +1,8 @@
 import jax.numpy as jnp
-import jax_cfd.base as cfd
+import jax_cfd.base as cfd  # version 0.2.1
 import numpy as np
 from jax import random
+from jax_cfd.collocated import initial_conditions
 
 EPS = jnp.finfo(float).eps
 
@@ -11,6 +12,20 @@ def init_u_tgv(x, y, z):
         [np.sin(x) * np.cos(y) * np.cos(z), -np.cos(x) * np.sin(y) * np.cos(z), x * 0]
     )
     return u
+
+
+def init_u_tgv2d(Nx, target_dim=2, rescale=1.0):
+    # rescale is used for the velocity and the domain size
+    L = rescale
+    dx = L / Nx
+    x_axis = np.linspace(dx / 2, L - dx / 2, Nx)
+    x, y = np.meshgrid(x_axis, x_axis)
+    u = np.array([-np.cos(x) * np.sin(y), np.sin(x) * np.cos(y)])
+
+    if target_dim == 3:
+        u = u[..., None]
+        u = jnp.concatenate([u, jnp.zeros((1, Nx, Nx, 1))], axis=0)
+    return u * rescale
 
 
 def init_u_hit(N, seed=42):
@@ -71,15 +86,21 @@ def init_u_hit(N, seed=42):
     return u
 
 
-def init_u_kolm(N, L=2 * np.pi, max_velocity=7, seed=42, target_dim=3):
+def init_u_kolm(N, L=2 * np.pi, max_velocity=7, seed=42, target_dim=3, iter=4):
     """Kolgomorov 2D field initialization. Based on
-    https://github.com/google/jax-cfd/blob/c31e6b94e4ad3b1b7aa8c3c86cd77ea0b8779e7a/notebooks/spectral_forced_turbulence.ipynb
+    https://github.com/google/jax-cfd/blob/0c17e3855702f884265b97bd6ff0793c34f3155e/jax_cfd/collocated/initial_conditions_test.py
+
+    The `iter` that work well in 2D are [4, 9, 12, 13, 18, ...]. Not sure why
+    the default is 3. Some intermediate values of `iter` blow up completely!?
     """
     grid = cfd.grids.Grid((N, N), domain=((0, L), (0, L)))
-    v0 = cfd.initial_conditions.filtered_velocity_field(
-        random.PRNGKey(seed), grid, max_velocity, 4
+
+    # Fails: from jax_cfd.base import initial_conditions
+    # Works: from jax_cfd.collocated import initial_conditions
+    v0 = initial_conditions.filtered_velocity_field(
+        random.PRNGKey(seed), grid, max_velocity, 4, iterations=iter
     )
-    v0 = jnp.array([v.data for v in v0]).reshape(2, N, N, 1)
+    v0 = jnp.array([v.data for v in v0])[..., None]  # (2, N, N, 1)
 
     if target_dim == 3:
         v0 = jnp.concatenate([v0, jnp.zeros((1, N, N, 1))], axis=0)

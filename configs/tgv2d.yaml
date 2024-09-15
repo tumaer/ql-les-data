@@ -1,0 +1,24 @@
+mode: simulate  # [simulate, integrate]
+gpu: 0
+float64: True
+
+sim:
+  case: "TGV2D"
+  N: 128
+  dim: 2
+  nu: 0.06283
+  t_final: 1.0
+  dt: 0.001  # h/11U = 2pi/32/(11*7) = 0.00255 => 0.001  (0.00175 in JAX-CFD)
+  u_ref: 6.283
+  seed: 42
+  log_freq: 100
+  vis_freq: 100
+  ckp_freq: 1
+  ckp_N: 32
+  dst_path: "results_tgv2d/"
+
+int:
+  dst_path: "results_tgv2d/"
+  state_0_path: "data_relaxed/tgv_2_0.03125_42.h5"
+  splits: 8
+  relax: True
