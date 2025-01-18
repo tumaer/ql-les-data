@@ -149,7 +149,14 @@ def simulate(
 
     # u_ = np.asarray(u[:2, :, :, 0])
     # u_filtered = np.asarray(spectral_filtering(u_, ckp_N))
-    # print(div_in_spectral_space(u_), div_in_spectral_space(u_filtered))
+    # # apply a simple convolution averaging filter
+    # # from scipy.signal import convolve2d
+    # # u_filtered = []
+    # # for i in range(2):
+    # #     u_filtered.append(convolve2d(u_[i], np.ones((2, 2)) / 4, mode="valid", ))
+    # # u_filtered = np.asarray(u_filtered)[:, ::2, ::2]
+
+    # # print(div_in_spectral_space(u_), div_in_spectral_space(u_filtered))
 
     # def comp_divergence(u, L=2 * jnp.pi, version=1):
     #     """Numerically evaluate the divergence of a vector field."""
@@ -163,20 +170,21 @@ def simulate(
     #             + u[1, 1:-1, 2:] - u[1, 1:-1, :-2]
     #         ) / (2 * dx)
     #     elif version == 2:
-    #         res = np.ufunc.reduce(np.add, [np.gradient(u[i], dx, axis=i) for i in range(len(u))])
-    #     elif version == 3:
+    #         temp = np.ufunc.reduce(np.add,
+    #             [np.gradient(u[i], dx, axis=i) for i in range(len(u))])
+    #         res[1:-1, 1:-1] = temp[1:-1, 1:-1]  # remove boundaries
+    #     elif version == 3:  # set boundaries to zero
     #         # Extract x and y components of velocity
     #         u, v = u
     #         # Compute partial derivatives using central difference
     #         dudx = (u[2:, 1:-1] - u[:-2, 1:-1]) / (2 * dx)  # du/dx
     #         dvdy = (v[1:-1, 2:] - v[1:-1, :-2]) / (2 * dy)  # dv/dy
     #         # Compute divergence in the central region of the grid
-    #         res = np.zeros_like(u)
     #         res[1:-1, 1:-1] = dudx + dvdy
-    #     elif version == 4:
+    #     elif version == 4:  # does not respect periodic boundary conditions
     #         dudx = np.gradient(u[0], dx, axis=0)
     #         dvdy = np.gradient(u[1], dx, axis=1)
-    #         res = dudx + dvdy
+    #         res[1:-1, 1:-1] = (dudx + dvdy)[1:-1, 1:-1]  # remove boundaries
 
     #     print("#2", res.shape)
     #     return res
@@ -187,16 +195,19 @@ def simulate(
     #     axs[i, 0].imshow(u_[i], cmap="turbo")
     #     axs[i, 0].set_title(f"{title} (min={u_[i].min():.2f}, max={u_[i].max():.2f})")
     #     axs[i, 1].imshow(u_filtered[i], cmap="turbo")
-    #     axs[i, 1].set_title(f"{title} (min={u_filtered[i].min():.2f}, max={u_filtered[i].max():.2f})")
+    #     axs[i, 1].set_title(
+    #         f"{title} (min={u_filtered[i].min():.2f}, max={u_filtered[i].max():.2f})")
 
     # version = 4
     # div_ = comp_divergence(u_, version=version)
     # axs[2, 0].imshow(div_, cmap="turbo")
-    # axs[2, 0].set_title(f"Div (min={div_.min():.2f}, max={div_.max():.2f})")
+    # axs[2, 0].set_title(f"Div (min={div_.min():.3f}, max={div_.max():.3f})")
     # div_filtered = comp_divergence(u_filtered, version=version)
     # axs[2, 1].imshow(div_filtered, cmap="turbo")
-    # axs[2, 1].set_title(f"Div (min={div_filtered.min():.2f}, max={div_filtered.max():.2f})")
+    # axs[2, 1].set_title(
+    #     f"Div (min={div_filtered.min():.3f}, max={div_filtered.max():.3f})")
 
+    # # after spectral filtering, field is not divergence-free
     # plt.savefig("divergence.png")
     # plt.close()
     ######################################################################
@@ -209,13 +220,14 @@ def simulate(
     # import matplotlib.pyplot as plt
     # _, axs = plt.subplots(1, 2, figsize=(10, 5))
     # my_imshow(axs[0], u[0, :, :, 0], -u_ref, u_ref)
-    # axs[1].scatter(xyz[0].reshape(-1), xyz[1].reshape(-1), c=u[0].reshape(-1), cmap="turbo", vmin=-u_ref, vmax=u_ref)
+    # axs[1].scatter(xyz[0].reshape(-1), xyz[1].reshape(-1), c=u[0].reshape(-1),
+    #     cmap="turbo", vmin=-u_ref, vmax=u_ref)
     # plt.savefig("orientation_check.png")
 
     u.block_until_ready()
     print("Compilation time:", time() - t0)
 
-    dst_vis = os.path.join(dst_path, "vis")
+    dst_vis = os.path.join(dst_path, "ckp_vis")
     dst_ckp = os.path.join(dst_path, "ckp")
     if vis_freq < 10**6:
         plot_e_k(u, 0, save_path=dst_vis, dim=dim)
@@ -235,13 +247,14 @@ def simulate(
 
         t_temp = time()
         if tstep % log_freq == 0:
+            e_kin = jnp.mean(jnp.sum(u * u, axis=0))
             print(
-                f"step {tstep}, u_max = {abs(u).max():.3f}, "
+                f"step {tstep}, u_max = {abs(u).max():.3f}, E_kin = {e_kin:.3f}, "
                 f"dt_est = {comp_dt(u, dx, nu):.5f}"
             )
         if tstep % vis_freq == 0:
             plot_views(xyz_vis, u, dx, tstep, save_path=dst_vis, u_ref=u_ref)
-            plot_e_k(u, tstep, save_path=dst_vis, dim=dim)
+            plot_e_k(u, tstep, save_path=dst_vis, dim=dim, ylims=(1e-8, 1e2))
         if tstep % ckp_freq == 0:
             write_u(u, tstep, dst_ckp, ckp_N)
         t_out += time() - t_temp

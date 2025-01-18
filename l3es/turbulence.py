@@ -10,8 +10,8 @@ from jax import lax, ops, vmap
 from jax.scipy.special import factorial
 from jax_sph.io_state import read_h5
 from jax_sph.jax_md import space
-from jax_sph.kernel import QuinticKernel, SuperGaussianKernel
-from jax_sph.utils import pos_init_cartesian_3d
+from jax_sph.kernel import QuinticKernel
+from jax_sph.utils import pos_init_cartesian_2d, pos_init_cartesian_3d
 from numpy import array
 from scipy.spatial import KDTree
 
@@ -141,7 +141,9 @@ def pbc_copy_scalar(
     return r_pbc, f_pbc
 
 
-def mls_2nd_order(r, r_target, f, box_size, dx, dim, kernel_name="M4PrimeKernel"):
+def mls_2nd_order(
+    r, r_target, f, box_size, dx, dim, kernel_name="M4Prime", h_factor=None
+):
     """2nd-order moving least squares interpolation for periodic flows in a
     rectangular box.
 
@@ -161,14 +163,16 @@ def mls_2nd_order(r, r_target, f, box_size, dx, dim, kernel_name="M4PrimeKernel"
     """
 
     # define kernel function
-    if kernel_name == "QuinticSpline":
-        kernel_fn = QuinticKernel(h=dx, dim=dim)
+    if kernel_name == "Quintic":
+        h_factor = 2 / 3 if h_factor is None else h_factor
+        kernel_fn = QuinticKernel(h=h_factor * dx, dim=dim)
         kernel_fn.pnorm = 2
-    elif kernel_name == "SuperGaussianKernel":
-        kernel_fn = SuperGaussianKernel(h=dx, dim=dim)
-        kernel_fn.pnorm = 2
-    elif kernel_name == "M4PrimeKernel":
-        kernel_fn = M4PrimeKernel(h=dx, dim=dim)
+    elif kernel_name == "M4Prime":
+        h_factor = 0.85 if h_factor is None else h_factor
+        kernel_fn = M4PrimeKernel(h=h_factor * dx, dim=dim)
+        kernel_fn.pnorm = np.inf
+    else:
+        raise NotImplementedError(f"Kernel {kernel_name} not implemented.")
 
     # displacement function for neighbors list
     displacement_fn, shift_fn = space.periodic(side=box_size)
@@ -187,12 +191,13 @@ def mls_2nd_order(r, r_target, f, box_size, dx, dim, kernel_name="M4PrimeKernel"
 
     # precompute quantities
     r_ji = vmap(displacement_fn)(r_pbc[j_s], r_target[i_s])
-    if kernel_name == "QuinticSpline":
-        w_dist = vmap(kernel_fn.w)(jnp.linalg.norm(r_ji, axis=1))
-    elif kernel_name == "M4PrimeKernel":
+    if kernel_name == "M4Prime":
         w_dist = vmap(kernel_fn.w)(r_ji)
-    elif kernel_name == "SuperGaussianKernel":
-        w_dist = vmap(kernel_fn.w)(jnp.linalg.norm(r_ji, axis=1))
+    elif kernel_name == "Quintic":
+        rel_distances = np.linalg.norm(r_ji, axis=1, ord=2)
+        w_dist = kernel_fn.w(rel_distances)
+    else:
+        raise NotImplementedError(f"Kernel {kernel_name} not implemented.")
 
     # define size of the linear system of equations
     sum1 = factorial(dim) / factorial(dim - 1)
@@ -247,31 +252,47 @@ def mls_2nd_order(r, r_target, f, box_size, dx, dim, kernel_name="M4PrimeKernel"
     return f_target
 
 
-def ur_to_u(r, u_r, N, L):
+def ur_to_u_mls_wrapper(N, L, dim=3):
     """Interpolate velocities from particles to regular grid using MLS.
 
     Args:
-        r (np.ndarray): particle positions of shape (N^3, 3)
-        u_r (np.ndarray): particle velocities of shape (N^3, 3)
-        N (int): number of grid points per dimension
-        L (float): domain size
-    """
-    dim = 3
-    assert (r.shape == u_r.shape) and (r.shape[0] == N**dim)
+        N (int): Number of particles per direction.
+        L (float): Domain size.
+        dim (int, optional): Dimension. For now only 3.
 
-    # get discretization parameters
+    Returns:
+        function: Interpolation function.
+    """
+
     dx = L / N
     box_size = L * np.ones(dim)
+    if dim == 3:
+        r_grid = pos_init_cartesian_3d(box_size, dx)
+    else:
+        r_grid = pos_init_cartesian_2d(box_size, dx)
 
-    # setup initial grid
-    r_grid = pos_init_cartesian_3d(box_size, dx)
+    def body(r, u_r):
+        """Core interpolate function.
 
-    # interpolate velocities to sph particles
-    u = mls_2nd_order(r, r_grid, u_r[:, 0], box_size, dx, dim)
-    v = mls_2nd_order(r, r_grid, u_r[:, 1], box_size, dx, dim)
-    w = mls_2nd_order(r, r_grid, u_r[:, 2], box_size, dx, dim)
+        Args:
+            r (np.ndarray): particle positions of shape (N^dim, dim)
+            u_r (np.ndarray): particle velocities of shape (N^3, dim)
 
-    return r_grid, jnp.array([u, v, w]).T
+        Returns:
+            u (np.ndarray): interpolated velocities on regular grid of shape (3,N,N,N)
+        """
+        assert (r.shape == u_r.shape) and (r.shape[0] == N**dim)
+
+        u_grid = [
+            mls_2nd_order(
+                r, r_grid, u_r[:, i], box_size, dx, dim, kernel_name="Quintic"
+            )
+            for i in range(dim)
+        ]
+
+        return jnp.array(u_grid).reshape(dim, -1).T
+
+    return body
 
 
 def ur_to_u_dft_wrapper(N, L, dim=3, fft_axes=(1, 2, 3)):
@@ -330,15 +351,16 @@ if __name__ == "__main__":
         # load h5 frame
         state = read_h5(os.path.join(data_path, f"int/step_{step:05d}.h5"))
         r, u_r = state["r"], state["u"]
-        # plot_views((r.T).reshape(3,N,N,N), (u_r.T).reshape(3,N,N,N), L/N, step, save_path=vis_path, u_ref=4.0)
+        # plot_views((r.T).reshape(3,N,N,N), (u_r.T).reshape(3,N,N,N), L/N, step,
+        #     save_path=vis_path, u_ref=4.0)
 
         # interpolate velocities to regular grid
         is_mls = False
         if is_mls:
-            r_grid, u_grid = ur_to_u(r, u_r, N, L)  # (N^3, 3), (N^3, 3)
+            r_grid, u_grid = ur_to_u_mls_wrapper(N, L, dim)(r, u_r)  # (N^3,3), (N^3,3)
         else:
             r_grid = pos_init_cartesian_3d(L * np.ones(3), L / N)
-            # r_eval = (r - dx/2)%L  # iFFT gives the values from (0,0,0), not dx/2*(1,1,1)
+            # r_eval=(r-dx/2)%L  # iFFT gives the values from (0,0,0), not dx/2*(1,1,1)
             u_grid = ur_to_u_dft_wrapper(N, L)(r, u_r)
 
         r_grid = np.asarray((r_grid.T).reshape(3, N, N, N))
@@ -349,4 +371,5 @@ if __name__ == "__main__":
         plot_views(r_grid, u_grid, L / N, step, save_path=vis_path, u_ref=u_ref)
         print("Done.")
 
-        # nohup python main.py config=configs/hit_192.yaml mode=integrate int.dst_path=results_hit_192_2/ gpu=2 >> hit_192_5_0002_2.out 2>&1 &
+        # nohup python main.py config=configs/hit_192.yaml mode=integrate \
+        #     int.dst_path=results_hit_192_2/ gpu=2 >> hit_192_5_0002_2.out 2>&1 &

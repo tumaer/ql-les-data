@@ -33,9 +33,15 @@ def get_real_wavenumber_grid(n, dim):
 def energy_spectrum(vel, mul_fac: float = 1.0, is_scalar_field: bool = False, dim=3):
     """JAX implemented energy spectrum computation on a grid.
 
-    Adapted from JAX-FLUIDS 1.0 implementation."""
+    Args:
+        vel (jnp.ndarray): Velocity field with shape (3, N, N, N) or (3, N, N, 1).
+        mul_fac (float): Multiplication factor for energy spectrum.
+        is_scalar_field (bool): Whether the field is scalar or vector.
+        dim (int): Dimension of the field.
 
-    if dim == 2:
+    Code based on JAX-FLUIDS implementation."""
+
+    if dim == 2:  # applies when the physics is 2D but data is padded to 3D
         vel = vel[:2, :, :, 0]
     ns = vel.shape[1:]
 
@@ -47,7 +53,8 @@ def energy_spectrum(vel, mul_fac: float = 1.0, is_scalar_field: bool = False, di
 
     # Fourier transform
     if dim == 1:
-        raise NotImplementedError("1D not implemented")
+        # TODO: check whether 1D is working
+        vel_hat = jnp.fft.rfftn(vel)
     elif dim == 2:
         vel_hat = jnp.fft.rfftn(vel, axes=(2, 1))
     elif dim == 3:
@@ -121,7 +128,9 @@ def spectral_filtering(u, ckp_N):
     # import matplotlib.pyplot as plt
     # _, axs = plt.subplots(1, 2, figsize=(10, 5))
     # axs[0].imshow(u[0])
+    # axs[0].set_title(f"[{u[0].min():.2f}, {u[0].max():.2f}]")
     # axs[1].imshow(y_ifft[0])
+    # axs[1].set_title(f"[{y_ifft[0].min():.2f}, {y_ifft[0].max():.2f}]")
     # plt.savefig("orientation_check.png")
 
     return y_ifft

@@ -8,7 +8,11 @@ if __name__ == "__main__":
     # TODO: add a check whether the cli_args are a subset of the defaults
     cfg = OmegaConf.merge(OmegaConf.load(cli_args.config), cli_args)
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu)
+    if str(cfg.gpu) == "-1":
+        os.environ["JAX_PLATFORMS"] = "cpu"
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu)
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(cfg.get("xla_mem_fraction", 0.8))
 
     if cfg.float64:
         config.update("jax_enable_x64", True)
@@ -17,6 +21,7 @@ if __name__ == "__main__":
     print(OmegaConf.to_yaml(cfg))
     print("#" * 79)
 
+    from l3es.combined import combined
     from l3es.integrator import integrate
     from l3es.spectral_solver import simulate
 
@@ -48,6 +53,27 @@ if __name__ == "__main__":
             dt=cfg.sim.dt,
             splits=cfg.int.splits,
             u_ref=cfg.sim.u_ref,
+            relax=cfg.int.relax,
+            vis_freq=cfg.int.vis_freq,
+        )
+    elif cfg.mode == "combined":
+        combined(
+            case=cfg.sim.case,
+            dst_path=cfg.com.dst_path,
+            state_0_path=cfg.int.state_0_path,
+            N=cfg.sim.N,
+            ckp_N=cfg.sim.ckp_N,
+            dim=cfg.sim.dim,
+            nu=cfg.sim.nu,
+            t_final=cfg.sim.t_final,
+            dt=cfg.sim.dt,
+            splits=cfg.int.splits,
+            u_ref=cfg.sim.u_ref,
+            relax=cfg.int.relax,
+            log_freq=cfg.com.log_freq,
+            vis_freq=cfg.com.vis_freq,
+            ckp_freq=cfg.com.ckp_freq,
+            seed=cfg.sim.seed,
         )
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")

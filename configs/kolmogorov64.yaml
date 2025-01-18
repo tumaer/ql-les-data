@@ -1,0 +1,32 @@
+mode: simulate  # [simulate, integrate]
+gpu: 0
+float64: True
+xla_mem_fraction: 0.5
+
+sim:
+  case: "Kolm"
+  N: 256
+  dim: 2
+  nu: 0.001  # from JAX-CFD
+  t_final: 1.0
+  dt: 0.0005  # h/11U = 2pi/64/(11*7) = 0.001275 => 0.001
+  u_ref: 7.0
+  seed: 42
+  log_freq: 100
+  vis_freq: 100
+  ckp_freq: 1000000
+  ckp_N: 64
+  dst_path: "results_kolm64/"
+
+int:
+  dst_path: "results_kolm64/"
+  state_0_path: "data_relaxed/tgv_2_0.015625_42.h5"
+  splits: 8
+  relax: True
+  vis_freq: 100
+
+com:
+  log_freq: 10
+  vis_freq: 1000
+  ckp_freq: 10
+  dst_path: "results_kolm64/"

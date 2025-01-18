@@ -14,7 +14,7 @@ config.update("jax_enable_x64", True)
 plt.rcParams.update({"font.size": 14})
 
 
-def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4):
+def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4, suffix=""):
     """Scatter plot of the flow field
 
     Args:
@@ -77,12 +77,14 @@ def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4):
 
     os.makedirs(save_path, exist_ok=True)
     if save_path:
-        plt.savefig(os.path.join(save_path, f"step_{step}_view.png"))
+        plt.savefig(os.path.join(save_path, f"step_{step}_view{suffix}.png"))
+    else:
+        plt.show()
 
     plt.close()
 
 
-def plot_e_k(u, step, save_path=None, dim=3):
+def plot_e_k(u, step, save_path=None, dim=3, ylims=(1e-4, 1e1), suffix=""):
     """Plot energy spectrum.
 
     Args:
@@ -108,11 +110,13 @@ def plot_e_k(u, step, save_path=None, dim=3):
     ax.set_xlabel("Wavenumber k")
     ax.set_ylabel("E(k)")
     ax.legend()
-    ax.set_ylim(1e-4, 1e1)
+    ax.set_ylim(ylims)
     fig.tight_layout()
 
-    os.makedirs(save_path, exist_ok=True)
     if save_path:
-        fig.savefig(os.path.join(save_path, f"step_{step}_spectrum.png"))
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(os.path.join(save_path, f"step_{step}_spectrum{suffix}.png"))
+    else:
+        plt.show()
 
     plt.close()

@@ -7,7 +7,8 @@ import numpy as np
 from jax_sph.io_state import read_h5, write_h5, write_vtk
 from jax_sph.utils import pos_init_cartesian_2d, pos_init_cartesian_3d
 
-from l3es.turbulence import ur_to_u_dft_wrapper
+from l3es.relax import relax_wrapper
+from l3es.turbulence import ur_to_u_dft_wrapper, ur_to_u_mls_wrapper
 from l3es.utils import rho_computer
 from l3es.visualize import plot_e_k, plot_views
 
@@ -72,7 +73,9 @@ def spectral_interpolator_wrapper(N, fft_axes=(1, 2, 3), splits=128):
 # vis_path = os.path.join(data_path, "int_vis")
 
 # u_r = spectral_interpolator_wrapper(N, splits=8)(u, r)
-# plot_views((r.T).reshape(3,N,N,N), (u_r.T).reshape(3,N,N,N), L/N, step, save_path=vis_path)
+# plot_views(
+#     (r.T).reshape(3,N,N,N), (u_r.T).reshape(3,N,N,N), L/N, step, save_path=vis_path
+# )
 
 
 def my_imshow(ax, u, vmin, vmax):
@@ -81,7 +84,16 @@ def my_imshow(ax, u, vmin, vmax):
 
 
 def integrate(
-    src_path, dst_path, state_0_path=None, N=32, dim=3, dt=0.01, splits=8, u_ref=4.0
+    src_path,
+    dst_path,
+    state_0_path=None,
+    N=32,
+    dim=3,
+    dt=0.01,
+    splits=8,
+    u_ref=4.0,
+    relax=False,
+    vis_freq=100,
 ):
     """Integrate SPH particles along prescribed velocity field.
 
@@ -90,8 +102,10 @@ def integrate(
         dst_path (str): Path to the directory where the integrated files will be saved.
         N (int): Number of particles in each dimension.
         dim (int): Dimension.
-        dt (float): Time step.
+        dt (float): Integration time step.
         splits (int): Into how many parts to split 'r' before vmap-ing.
+        relax (bool): whether to relax the coordinates.
+        u_ref (float): Reference velocity for visualization and relaxation.
     """
     L = 2 * np.pi
     fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
@@ -103,6 +117,11 @@ def integrate(
     int_path = os.path.join(dst_path, "int")
     os.makedirs(int_path, exist_ok=True)
 
+    all_accs = {}
+    # for factor in [5, 7, 10, 15, 20, 25]:
+    factor = 20
+    accs = []
+
     if state_0_path is not None:
         r = read_h5(state_0_path)["r"]
     else:
@@ -112,22 +131,55 @@ def integrate(
             r = pos_init_cartesian_2d(L * np.ones(2), L / N)
 
     comp_rho = rho_computer(N, dim=dim, L=L)
-    interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=8)
+    interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=splits)
+    relax_fn = relax_wrapper(N, dim, L, is_physical=True, u_ref=u_ref)
     t0 = time()
     t_int = 0.0
+    # r = shift_fn(r, jax.random.normal(jax.random.key(42), r.shape) * 0.1 * L / N)
     for i, file in enumerate(files):
         u = np.load(os.path.join(ckp_path, file))
+        # evaluate the spectrum on the input field as a sanity check -> looks fine!
+        # if dim == 2:
+        #     u_input = np.vstack([u, np.zeros_like(u[:1])])[:, :, :, None]
+        # plot_e_k(u_input, i, save_path=vis_path, dim=dim)
 
         t_temp = time()
         # r_eval = (r-dx/2) % L  # TODO: shift r by dx/2?
         u_r = interpolator(u, r)
+        u_r_0 = u_r.copy()
+        if relax:
+            # r_temp = shift_fn(r, dt * u_r)  # switching order doesn't change anything
+            # r_temp = r
+            # a_r = factor * relax_fn(r_temp)
+            a_r = np.zeros_like(r)
+            a_r_s = []
+            print(f"Relax ({i},0): {u_r.max():.4f} [", end="")
+            r_temp = shift_fn(r, dt * u_r)  # emulate "next step" to relax there
+            for _ in range(10):
+                # print(f"{comp_rho(r).max():.3f}, ", end='')
+                a_temp = relax_fn(r_temp)
+                r_temp = shift_fn(r_temp, dt**2 * a_temp)
+                print(f"{a_temp.max():.3f}, ", end="")
+
+                a_r_s.append(a_temp * dt)
+                a_r += a_temp
+            print(f"] Relax ({i},1): {u_r.max():.4f}, {a_r.max():.4f} ", end="")
+
+            a_max = a_r.max()
+            accs.append(a_max)
+            if a_max > 100_000:
+                print("Breaking.")
+                break
+            u_r += dt * a_r
         t_int += time() - t_temp
 
         # import matplotlib.pyplot as plt
         # _, axs = plt.subplots(1, 2, figsize=(10, 5))
         # my_imshow(axs[0], u[0, :, :], -u_ref, u_ref)
-        # axs[1].scatter(r[:,0], r[:,1], s=36 * (32 / N) ** 2, c=u_r[:,0], cmap="turbo", vmin=-u_ref, vmax=u_ref)
-        # axs[1].set_title(f"u_r_x (min={u_r[:,0].min():.2f}, max={u_r[:,0].max():.2f})")
+        # axs[1].scatter(r[:,0], r[:,1], s=36 * (32 / N) ** 2, c=u_r[:,0],
+        #                cmap="turbo", vmin=-u_ref, vmax=u_ref)
+        # axs[1].set_title(
+        #     f"u_r_x (min={u_r[:,0].min():.2f}, max={u_r[:,0].max():.2f})")
         # plt.savefig("orientation_check.png")
 
         #########################
@@ -161,23 +213,39 @@ def integrate(
 
         #########################
 
-        write_h5({"r": r, "u": u_r}, os.path.join(int_path, f"step_{i:05d}.h5"))
-        write_vtk({"r": r, "u": u_r}, os.path.join(int_path, f"step_{i:05d}.vtk"))
+        # write_h5({"r": r, "u": u_r}, os.path.join(int_path, f"step_{i:05d}.h5"))
+        out_dict = {
+            "r": r,
+            "u_r": u_r_0,
+            "u_r_0": u_r_0,
+            "a_r_dt": a_r * dt,
+            "rho": comp_rho(r),
+        }
+        for ii, temprary_a in enumerate(a_r_s):
+            out_dict[f"a_r_{ii}_dt"] = temprary_a
+        write_vtk(out_dict, os.path.join(int_path, f"step_{i:05d}.vtk"))
+        print(f"Step {i}/{len(files)}, rho_max={out_dict['rho'].max():.3f}.")
 
-        if i % 100 == 0:
+        if i % vis_freq == 0:
             r_vis = (r.T).reshape(*u.shape)
             u_vis = (u_r.T).reshape(*u.shape)
             if dim == 2:
                 r_vis = np.vstack([r_vis, np.zeros_like(r_vis[:1])])[:, :, :, None]
                 u_vis = np.vstack([u_vis, np.zeros_like(u_vis[:1])])[:, :, :, None]
             rho = comp_rho(r).reshape(*u.shape[1:])
+            print("plotting to ", vis_path)
             plot_views(r_vis, u_vis, L / N, i, rho, save_path=vis_path, u_ref=u_ref)
             # TODO: shift r by dx/2?
-            u_grid = ur_to_u_dft_wrapper(N, L, dim, fft_axes)(r, u_r)
+            is_dft_to_grid = False  # MLS works better!
+            if is_dft_to_grid:
+                u_grid = ur_to_u_dft_wrapper(N, L, dim, fft_axes)(r, u_r_0)
+            else:
+                u_grid = ur_to_u_mls_wrapper(N, L, dim)(r, u_r_0)
             u_grid = np.asarray((u_grid.T).reshape(*u.shape))
             if dim == 2:
                 u_grid = np.vstack([u_grid, np.zeros_like(u_grid[:1])])[:, :, :, None]
             plot_e_k(u_grid, i, save_path=vis_path, dim=dim)
+            print(f"Step {i}/{len(files)} done.")
 
         r = shift_fn(r, dt * u_r)
 
@@ -186,3 +254,8 @@ def integrate(
 
     t_tot = time() - t0
     print(f"t_tot = {t_tot:.3f}, t_int = {t_int:.3f}")
+    all_accs[factor] = np.array(accs)
+
+    # import pickle
+    # with open(os.path.join(dst_path, "accs.pkl"), "wb") as f:
+    #     pickle.dump(all_accs, f)
