@@ -236,3 +236,13 @@ def comp_divergence(u, dx, version=2):
             u[0, 2:, 1:-1] - u[0, :-2, 1:-1] + u[1, 1:-1, 2:] - u[1, 1:-1, :-2]
         ) / (2 * dx)
         return res
+
+
+def comp_vorticity(u, dx):
+    """Computes vorticity of vector field
+    u (array) -> vector field components [Fx,Fy,Fz,...]
+    dx (float) -> spacing between points in every directions
+    """
+    dudy = np.gradient(u[0], dx, axis=1)
+    dvdx = np.gradient(u[1], dx, axis=0)
+    return dvdx - dudy

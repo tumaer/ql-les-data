@@ -1,0 +1,10 @@
+extends: JAX_SPH_DEFAULTS
+
+case:
+  source: "rlx.py"
+  dim: 2
+  dx: 0.0981747704
+
+io:
+  write_type: ["h5"]
+  write_every: 500

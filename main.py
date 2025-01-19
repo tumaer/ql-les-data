@@ -34,7 +34,7 @@ if __name__ == "__main__":
             t_final=cfg.sim.t_final,
             dt=cfg.sim.dt,
             u_ref=cfg.sim.u_ref,
-            seed=cfg.sim.seed,
+            seed=cfg.seed,
             log_freq=cfg.sim.log_freq,
             vis_freq=cfg.sim.vis_freq,
             ckp_freq=cfg.sim.ckp_freq,
@@ -73,7 +73,7 @@ if __name__ == "__main__":
             log_freq=cfg.com.log_freq,
             vis_freq=cfg.com.vis_freq,
             ckp_freq=cfg.com.ckp_freq,
-            seed=cfg.sim.seed,
+            seed=cfg.seed,
         )
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")

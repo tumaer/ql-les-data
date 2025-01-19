@@ -84,42 +84,7 @@ def comp_dt(u, dx, nu, cfl=1.0):
     return dt
 
 
-def simulate(
-    case="TGV",
-    N=64,
-    dim=3,
-    nu=0.000625,
-    t_final=0.1,
-    dt=0.01,
-    u_ref=1.0,
-    seed=42,
-    log_freq=20,
-    vis_freq=10**8,
-    ckp_freq=1,
-    ckp_N=32,
-    dst_path=None,
-):
-    """Simulator wrapper.
-
-    Args:
-        case (str): Simulation case. One of ["TGV", "HIT", "Kolm", ...].
-        N (int): Grid size. Nx=Ny=Nz=N. Simulation time:
-            N=2**6=64  t_sim(steps=200)=1.46s, N=2**7=128 t_sim=3.55s, N=192 t_sim=22.2.
-        dim (int): Dimension.
-        nu (float): Viscosity = 1/Re. nu=0.000625 for Re=1600.
-        t_final (float): Final time.
-        dt (float): Integration time step. N=64, Re=1600: dt=0.031 last stable; computed
-            dt=0.027 (CFL=1.15); we use dt=0.01 (CFL=0.37).  N=192, Re=1600: computed
-            dt=0.0087
-        u_ref (float): Reference velocity. Used for plotting and CFL computation.
-        case (str): Simulation case. One of ["TGV", "HIT"].
-        log_freq (int): How often to log simulation progress.
-        vis_freq (int): How often to generate visualizations.
-        ckp_freq (int): How often to save the flow field.
-        ckp_N (int): How many spatial modes to keep (after spectral filtering).
-        dst_path (str): Where to write results. (Destination path)
-    """
-
+def set_up_solver(N, nu, dim, case, dt, seed):
     L = 2 * jnp.pi
     dx = L / N
     len_z = N if dim == 3 else 1
@@ -136,7 +101,7 @@ def simulate(
     elif case == "HIT":
         u = init_u_hit(N, seed)
     elif case == "Kolm":
-        u = init_u_kolm(N, target_dim=3)
+        u = init_u_kolm(N, seed=seed, target_dim=3)
     elif case == "TGV2D":
         u = init_u_tgv2d(N, target_dim=3, rescale=L)
     u_hat = jnp.fft.rfftn(u, axes=fft_axes).squeeze()  # (3,N,N,N//2+1)
@@ -227,10 +192,53 @@ def simulate(
     u.block_until_ready()
     print("Compilation time:", time() - t0)
 
+    return u, u_hat, xyz_vis, dx, integrate_fn, L, fft_axes
+
+
+def simulate(
+    case="TGV",
+    N=64,
+    dim=3,
+    nu=0.000625,
+    t_final=0.1,
+    dt=0.01,
+    u_ref=1.0,
+    seed=42,
+    log_freq=20,
+    vis_freq=10**8,
+    ckp_freq=1,
+    ckp_N=32,
+    dst_path=None,
+):
+    """Simulator wrapper.
+
+    Args:
+        case (str): Simulation case. One of ["TGV", "HIT", "Kolm", ...].
+        N (int): Grid size. Nx=Ny=Nz=N. Simulation time:
+            N=2**6=64  t_sim(steps=200)=1.46s, N=2**7=128 t_sim=3.55s, N=192 t_sim=22.2.
+        dim (int): Dimension.
+        nu (float): Viscosity = 1/Re. nu=0.000625 for Re=1600.
+        t_final (float): Final time.
+        dt (float): Integration time step. N=64, Re=1600: dt=0.031 last stable; computed
+            dt=0.027 (CFL=1.15); we use dt=0.01 (CFL=0.37).  N=192, Re=1600: computed
+            dt=0.0087
+        u_ref (float): Reference velocity. Used for plotting and CFL computation.
+        case (str): Simulation case. One of ["TGV", "HIT"].
+        log_freq (int): How often to log simulation progress.
+        vis_freq (int): How often to generate visualizations.
+        ckp_freq (int): How often to save the flow field.
+        ckp_N (int): How many spatial modes to keep (after spectral filtering).
+        dst_path (str): Where to write results. (Destination path)
+    """
+
+    u, u_hat, xyz_vis, dx, integrate_fn, _, _ = set_up_solver(
+        N, nu, dim, case, dt, seed
+    )
+
     dst_vis = os.path.join(dst_path, "ckp_vis")
     dst_ckp = os.path.join(dst_path, "ckp")
     if vis_freq < 10**6:
-        plot_e_k(u, 0, save_path=dst_vis, dim=dim)
+        plot_e_k(u, 0, save_path=dst_vis, dim=dim, ylims=(1e-8, 1e2))
         plot_views(xyz_vis, u, dx, 0, save_path=dst_vis, u_ref=u_ref)
     if ckp_freq < 10**6:
         write_u(u, 0, dst_ckp, ckp_N)

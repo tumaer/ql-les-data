@@ -3,9 +3,10 @@ import os
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 from jax import config
 
-from l3es.utils import comp_divergence, energy_spectrum
+from l3es.utils import comp_divergence, comp_vorticity, energy_spectrum
 
 EPS = jnp.finfo(float).eps
 config.update("jax_enable_x64", True)
@@ -14,7 +15,7 @@ config.update("jax_enable_x64", True)
 plt.rcParams.update({"font.size": 14})
 
 
-def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4, suffix=""):
+def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""):
     """Scatter plot of the flow field
 
     Args:
@@ -22,6 +23,7 @@ def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4, suffix=""):
         u (np.ndarray): Flow field with shape (3, N, N, N) or (3, N, N, 1).
         dx (float): Grid spacing.
         step (int): Current time step.
+        field2 [key, value]: Additional field to plot.
         save_path (str): Results root directory.
         u_ref (float): Reference velocity for vmin and vmax in scatter plots.
     """
@@ -34,8 +36,8 @@ def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4, suffix=""):
         mask = (x > 2 * np.pi - 1.4 * dx) + (y < 1.4 * dx) + (z > 2 * np.pi - 1.4 * dx)
         xyz_ = (x[mask], y[mask], z[mask])
 
-        fields = [u[0], rho, np.linalg.norm(u, axis=0)]
-        labels = ["ux", "rho", "|u|"]
+        fields = [u[0], field2[1], np.linalg.norm(u, axis=0)]
+        labels = ["ux", field2[0], "|u|"]
         vmins = [-u_ref, 0.95, 0]
         vmaxs = [u_ref, 1.05, u_ref]
     else:
@@ -44,17 +46,20 @@ def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4, suffix=""):
         xyz_ = (x, y)
         u = u.squeeze()
 
-        labels = ["ux", "rho", "|u|"]
-        vmins = [-u_ref, 0.95, 0]
-        vmaxs = [u_ref, 1.05, u_ref]
-
-        if rho is None:
-            rho = comp_divergence(u, dx, version=2)
-            labels = ["ux", "div", "|u|"]
+        if field2 is None:
+            is_vorticity = True
+            if is_vorticity:
+                field2 = ["vort", comp_vorticity(u, dx)]
+            else:
+                field2 = ["div", comp_divergence(u, dx, version=2)]
             vmins = [-u_ref, None, 0]
             vmaxs = [u_ref, None, u_ref]
+        else:
+            vmins = [-u_ref, 0.95, 0]
+            vmaxs = [u_ref, 1.05, u_ref]
 
-        fields = [u[0], rho, np.linalg.norm(u, axis=0)]
+        labels = ["ux", field2[0], "|u|"]
+        fields = [u[0], field2[1], np.linalg.norm(u, axis=0)]
 
     size = 36 * (32 / x.shape[0]) ** 2
 
@@ -63,7 +68,8 @@ def plot_views(xyz, u, dx, step, rho=None, save_path=None, u_ref=4, suffix=""):
             return
         if dim == 3:
             ax.view_init(elev=25.0, azim=-35, roll=0)
-        ax.scatter(*xyz_, c=c[mask], cmap="turbo", s=size, vmin=vmin, vmax=vmax)
+        cmap = sns.color_palette("icefire", as_cmap=True) if lbl == "vort" else "turbo"
+        ax.scatter(*xyz_, c=c[mask], cmap=cmap, s=size, vmin=vmin, vmax=vmax)
         ax.set_aspect("equal", "box")
         ax.set_title(f"{lbl} (min={c.min():.2f}, max={c.max():.2f})")
 

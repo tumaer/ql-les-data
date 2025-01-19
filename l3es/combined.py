@@ -3,16 +3,12 @@ from time import time
 
 import jax.numpy as jnp
 import numpy as np
-from jax import jit
-from jax_sph.io_state import read_h5, write_h5, write_vtk
-from jax_sph.utils import pos_init_cartesian_2d, pos_init_cartesian_3d
+from jax_sph.io_state import write_h5, write_vtk
 
-from l3es.init_fields import init_u_hit, init_u_kolm, init_u_tgv, init_u_tgv2d
-from l3es.integrator import shift_fn, spectral_interpolator_wrapper
-from l3es.relax import relax_wrapper
-from l3es.spectral_solver import comp_dt, rhs_wrapper, rk4_wrapper
+from l3es.integrator import set_up_integrator, shift_fn
+from l3es.spectral_solver import comp_dt, set_up_solver
 from l3es.turbulence import ur_to_u_dft_wrapper, ur_to_u_mls_wrapper
-from l3es.utils import rho_computer, spectral_filtering
+from l3es.utils import spectral_filtering
 from l3es.visualize import plot_e_k, plot_views
 
 
@@ -51,49 +47,20 @@ def combined(
     int_path = os.path.join(dst_path, "com")
     os.makedirs(int_path, exist_ok=True)
 
-    L = 2 * np.pi
-    dx_dns = L / N
-    len_z = N if dim == 3 else 1
-    fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
-
-    # set up spectral solver
-    xyz = jnp.meshgrid(jnp.arange(N), jnp.arange(N), jnp.arange(len_z), indexing="ij")
-    xyz = jnp.array(xyz) * L / N
-    xyz_vis = (xyz.T + jnp.array([0, 0, L - dx_dns])).T if dim == 2 else xyz
-    if case == "TGV":
-        u = init_u_tgv(xyz[0], xyz[1], xyz[2])  # (3,N,N,N)
-    elif case == "HIT":
-        u = init_u_hit(N, seed)
-    elif case == "Kolm":
-        u = init_u_kolm(N, target_dim=3)
-    elif case == "TGV2D":
-        u = init_u_tgv2d(N, target_dim=3, rescale=L)
-    u_hat = jnp.fft.rfftn(u, axes=fft_axes).squeeze()  # (3,N,N,N//2+1)
-    t0 = time()
-    integrate_fn = rk4_wrapper(dt, rhs_wrapper(N, nu, fft_axes), fft_axes)
-    integrate_fn = jit(integrate_fn)
-    u, u_hat = integrate_fn(u, u_hat)
-    u.block_until_ready()
-    print("Compilation time:", time() - t0)
+    u, u_hat, xyz_vis, dx_dns, integrate_fn, L, fft_axes = set_up_solver(
+        N, nu, dim, case, dt, seed
+    )
     print("#" * 79, f"\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}")
     t = 0.0
-    t0 = time()
     t_sim = 0.0
-    tstep_max = round(t_final / dt)
+    tstep_max = round(t_final / dt) + 1
 
-    # set up SPH particles
+    r, comp_rho, interpolator, relax_fn, _, _ = set_up_integrator(
+        state_0_path, dim, ckp_N, splits, u_ref
+    )
     accs = []
-    if state_0_path is not None:
-        r = read_h5(state_0_path)["r"]
-    else:
-        if dim == 3:
-            r = pos_init_cartesian_3d(L * np.ones(3), L / ckp_N)
-        else:
-            r = pos_init_cartesian_2d(L * np.ones(2), L / ckp_N)
-    comp_rho = rho_computer(ckp_N, dim=dim, L=L)
-    interpolator = spectral_interpolator_wrapper(ckp_N, fft_axes, splits=splits)
-    relax_fn = relax_wrapper(ckp_N, dim, L, is_physical=True, u_ref=u_ref)
     t_int = 0.0
+    t0 = time()
 
     for i in range(tstep_max):
         t += dt
@@ -198,7 +165,7 @@ def combined(
                 u_vis,
                 L / ckp_N,
                 i,
-                rho,
+                ["rho", rho],
                 save_path=vis_path,
                 u_ref=u_ref,
                 suffix="_sph",
@@ -219,12 +186,5 @@ def combined(
 
         r = shift_fn(r, dt * u_r)
 
-    # write_h5({"r": r, "u": u_r}, os.path.join(int_path, f"step_{i+1:05d}.h5"))
-    write_vtk({"r": r, "u": u_r_0}, os.path.join(int_path, f"step_{i+1:05d}.vtk"))
-
     t_tot = time() - t0
     print(f"t_tot = {t_tot:.3f}, t_sim = {t_sim}, t_int = {t_int:.3f}")
-
-    # import pickle
-    # with open(os.path.join(dst_path, "accs.pkl"), "wb") as f:
-    #     pickle.dump(all_accs, f)

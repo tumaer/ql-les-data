@@ -230,8 +230,8 @@ def compute_statistics_h5(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--src_dir", default="dataset_kolm", type=str)
-    parser.add_argument("--dst_dir", default="dataset_kolm", type=str)
+    parser.add_argument("--src_dir", type=str)
+    parser.add_argument("--dst_dir", type=str)
     parser.add_argument("--split", default="2_1_1", type=str, help="E.g. 3_1_1")
     parser.add_argument("--skip_first_n_frames", type=int, default=0)
     parser.add_argument("--slice_every_nth_frame", type=int, default=1)

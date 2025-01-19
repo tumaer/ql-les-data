@@ -1,6 +1,7 @@
 mode: simulate  # [simulate, integrate]
 gpu: 0
 float64: True
+seed: null
 
 sim:
   case: "TGV"
@@ -10,7 +11,6 @@ sim:
   t_final: 0.1
   dt: 0.01
   u_ref: 1.0
-  seed: null
   log_freq: 5
   vis_freq: 5
   ckp_freq: 5

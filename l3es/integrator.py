@@ -83,6 +83,25 @@ def my_imshow(ax, u, vmin, vmax):
     ax.set_title(f"ux (min={u.min():.2f}, max={u.max():.2f})")
 
 
+def set_up_integrator(state_0_path, dim, N, splits, u_ref):
+    L = 2 * np.pi
+    fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
+
+    if state_0_path is not None:
+        r = read_h5(state_0_path)["r"]
+    else:
+        if dim == 3:
+            r = pos_init_cartesian_3d(L * np.ones(3), L / N)
+        else:
+            r = pos_init_cartesian_2d(L * np.ones(2), L / N)
+
+    comp_rho = rho_computer(N, dim=dim, L=L)
+    interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=splits)
+    relax_fn = relax_wrapper(N, dim, L, is_physical=True, u_ref=u_ref)
+
+    return r, comp_rho, interpolator, relax_fn, L, fft_axes
+
+
 def integrate(
     src_path,
     dst_path,
@@ -107,8 +126,6 @@ def integrate(
         relax (bool): whether to relax the coordinates.
         u_ref (float): Reference velocity for visualization and relaxation.
     """
-    L = 2 * np.pi
-    fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
 
     ckp_path = os.path.join(src_path, "ckp")
     files = get_ckps_list(ckp_path)
@@ -117,22 +134,13 @@ def integrate(
     int_path = os.path.join(dst_path, "int")
     os.makedirs(int_path, exist_ok=True)
 
+    r, comp_rho, interpolator, relax_fn, L, fft_axes = set_up_integrator(
+        state_0_path, dim, N, splits, u_ref
+    )
     all_accs = {}
     # for factor in [5, 7, 10, 15, 20, 25]:
     factor = 20
     accs = []
-
-    if state_0_path is not None:
-        r = read_h5(state_0_path)["r"]
-    else:
-        if dim == 3:
-            r = pos_init_cartesian_3d(L * np.ones(3), L / N)
-        else:
-            r = pos_init_cartesian_2d(L * np.ones(2), L / N)
-
-    comp_rho = rho_computer(N, dim=dim, L=L)
-    interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=splits)
-    relax_fn = relax_wrapper(N, dim, L, is_physical=True, u_ref=u_ref)
     t0 = time()
     t_int = 0.0
     # r = shift_fn(r, jax.random.normal(jax.random.key(42), r.shape) * 0.1 * L / N)
@@ -234,7 +242,8 @@ def integrate(
                 u_vis = np.vstack([u_vis, np.zeros_like(u_vis[:1])])[:, :, :, None]
             rho = comp_rho(r).reshape(*u.shape[1:])
             print("plotting to ", vis_path)
-            plot_views(r_vis, u_vis, L / N, i, rho, save_path=vis_path, u_ref=u_ref)
+            field2 = ["rho", rho]
+            plot_views(r_vis, u_vis, L / N, i, field2, save_path=vis_path, u_ref=u_ref)
             # TODO: shift r by dx/2?
             is_dft_to_grid = False  # MLS works better!
             if is_dft_to_grid:
