@@ -41,30 +41,19 @@ def single_h5_files_to_h5_dataset(args):
     splits_array = np.array([int(s) for s in args.split.split("_")])
     splits_sum = splits_array.sum()
 
-    if len(dirs) == 1:  # split one long trajectory into train, valid, and test
-        files = os.listdir(os.path.join(args.src_dir, dirs[0]))
-        files = [f for f in files if (".h5" in f)]
-        files = sorted(files, key=lambda x: int(x.split("_")[1][:-3]))
-        files = files[args.skip_first_n_frames :: args.slice_every_nth_frame]
+    # multiple trajectories
+    num_eval = np.ceil(splits_array[1] / splits_sum * len(dirs)).astype(int)
+    # at least one validation and one testing trajectory
+    splits_trajs = np.cumsum([0, len(dirs) - 2 * num_eval, num_eval, num_eval])
+    num_trajs_train, num_trajs_test = len(dirs) - 2 * num_eval, num_eval
 
-        num_eval = np.ceil(splits_array[1] / splits_sum * len(files)).astype(int)
-        # at least one validation and one testing trajectory
-        splits_trajs = np.cumsum([0, len(files) - 2 * num_eval, num_eval, num_eval])
-
-        num_trajs_train = num_trajs_test = 1
-
-        sequence_length_train, sequence_length_test = splits_trajs[1] - 1, num_eval - 1
-    else:  # multiple trajectories
-        num_eval = np.ceil(splits_array[1] / splits_sum * len(dirs)).astype(int)
-        # at least one validation and one testing trajectory
-        splits_trajs = np.cumsum([0, len(dirs) - 2 * num_eval, num_eval, num_eval])
-
-        num_trajs_train, num_trajs_test = len(dirs) - 2 * num_eval, num_eval
-
-        # seqience_length should be after subsampling every nth trajectory
-        # and "-1" because of the last target position (see GNS dataset format)
-        files_per_traj = len(os.listdir(os.path.join(args.src_dir, dirs[0], "com")))
-        sequence_length_train = sequence_length_test = files_per_traj - 1
+    # seqience_length should be after subsampling every nth trajectory
+    # and "-1" because of the last target position (see GNS dataset format)
+    files_per_traj = len(os.listdir(os.path.join(args.src_dir, dirs[0], "com")))
+    files_per_traj = np.ceil(
+        (files_per_traj - args.skip_first_n_frames) / args.slice_every_nth_frame,
+    ).astype(int)
+    sequence_length_train = sequence_length_test = files_per_traj
 
     for i, split in enumerate(["train", "valid", "test"]):
         hf = h5py.File(os.path.join(args.dst_dir, f"{split}.h5"), "w")
