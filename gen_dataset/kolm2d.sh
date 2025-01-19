@@ -14,6 +14,6 @@ do
         int.state_0_path=$DATA_ROOT/data_relaxed/rlx_2_0.0981747704_${seed}.h5 \
         com.dst_path=$DATA_ROOT/raw/2D_KOLM_4096_20kevery10/traj_${seed}
 done
-python gen_dataset.py --split=2_1_1 --skip_first_n_frames=1000 \
+python gen_dataset.py --split=2_1_1 --skip_first_n_frames=100 \
     --src_dir=$DATA_ROOT/raw/2D_KOLM_4096_20kevery10/ \
     --dst_dir=$DATA_ROOT/datasets/2D_KOLM_4096_20kevery10/

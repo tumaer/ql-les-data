@@ -26,6 +26,8 @@ if __name__ == "__main__":
     from l3es.spectral_solver import simulate
 
     if cfg.mode == "simulate":
+        os.makedirs(cfg.sim.dst_path, exist_ok=True)
+        OmegaConf.save(cfg, os.path.join(cfg.sim.dst_path, "config.yaml"))
         simulate(
             case=cfg.sim.case,
             N=cfg.sim.N,
@@ -42,6 +44,8 @@ if __name__ == "__main__":
             dst_path=cfg.sim.dst_path,
         )
     elif cfg.mode == "integrate":
+        os.makedirs(cfg.int.dst_path, exist_ok=True)
+        OmegaConf.save(cfg, os.path.join(cfg.int.dst_path, "config.yaml"))
         # dt_SPH = cfl * h / (c_ref + u_ref)
         # dt_SPH = 1.0 * 2*3.1416/32 / (11 * 4) = 0.0045 !
         integrate(
@@ -57,6 +61,8 @@ if __name__ == "__main__":
             vis_freq=cfg.int.vis_freq,
         )
     elif cfg.mode == "combined":
+        os.makedirs(cfg.com.dst_path, exist_ok=True)
+        OmegaConf.save(cfg, os.path.join(cfg.com.dst_path, "config.yaml"))
         combined(
             case=cfg.sim.case,
             dst_path=cfg.com.dst_path,

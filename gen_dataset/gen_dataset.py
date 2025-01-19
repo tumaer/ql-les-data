@@ -63,7 +63,7 @@ def single_h5_files_to_h5_dataset(args):
 
         # seqience_length should be after subsampling every nth trajectory
         # and "-1" because of the last target position (see GNS dataset format)
-        files_per_traj = len(os.listdir(os.path.join(args.src_dir, dirs[0])))
+        files_per_traj = len(os.listdir(os.path.join(args.src_dir, dirs[0], "com")))
         sequence_length_train = sequence_length_test = files_per_traj - 1
 
     for i, split in enumerate(["train", "valid", "test"]):
@@ -71,7 +71,7 @@ def single_h5_files_to_h5_dataset(args):
 
         # multiple trajectories
         for j, dir in enumerate(dirs[splits_trajs[i] : splits_trajs[i + 1]]):
-            traj_path = os.path.join(args.src_dir, dir)
+            traj_path = os.path.join(args.src_dir, dir, "com")
             files = os.listdir(traj_path)
             files = [f for f in files if (".h5" in f)]
             files = sorted(files, key=lambda x: int(x.split("_")[1][:-3]))
@@ -111,7 +111,7 @@ def single_h5_files_to_h5_dataset(args):
 
     # metadata
     # Compatible with the lagrangebench metadata.json files
-    cfg = OmegaConf.load(os.path.join(traj_path, "config.yaml"))
+    cfg = OmegaConf.load(os.path.join(args.src_dir, dir, "config.yaml"))
 
     metadata = {
         "case": cfg.sim.case.upper(),
