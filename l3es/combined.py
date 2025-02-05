@@ -8,7 +8,11 @@ from jax_sph.io_state import write_h5, write_vtk
 from l3es.integrator import set_up_integrator, shift_fn
 from l3es.spectral_solver import comp_dt, set_up_solver
 from l3es.turbulence import ur_to_u_dft_wrapper, ur_to_u_mls_wrapper
-from l3es.utils import spectral_filtering
+from l3es.utils import (
+    make_incompressible_real,
+    make_incompressible_spectral,
+    spectral_filtering,
+)
 from l3es.visualize import plot_e_k, plot_views
 
 
@@ -94,12 +98,52 @@ def combined(
             ckp_N % 2 == 0 and u.shape[1] % 2 == 0
         ), "Only tested for even N and ckp_N."
         u_lres = u_hres if ckp_N == u.shape[1] else spectral_filtering(u_hres, ckp_N)
+        # u_lres.shape = (2, ckp_N, ckp_N)
         # # evaluate the spectrum on the input field as a sanity check -> looks fine!
         # if dim == 2:
         #     u_input = np.vstack([u_lres, np.zeros_like(u_lres[:1])])[:, :, :, None]
         # plot_e_k(
         #     u_input, i, save_path=vis_path, dim=dim, ylims=(1e-8,1e2), suffix="_val"
         # )
+
+        incompr_type = None  # "real", "spectral", or None
+        # Overall, incompressility is not the reason for having to relax particles.
+        if incompr_type == "spectral":
+            # Make vel. field incompressible in spectral space, i.e. ik_i u_i = 0
+            # Nothing will change in the field as filtering doesn't affect it.
+            u_temp = np.vstack([u_lres, np.zeros_like(u_lres[:1])])[:, :, :, None]
+            u_lres, _ = make_incompressible_spectral(ckp_N, fft_axes)(u=u_temp)
+            # u_lres.shape = (3, ckp_N, ckp_N)
+        elif incompr_type == "real":
+            # Make vel. field incompressible when evaluated with finite difference
+            u_lres = make_incompressible_real(u_lres, ckp_N, L).squeeze()
+            # u_lres.shape = (3, ckp_N, ckp_N)
+        if incompr_type is not None and dim == 2:
+            u_lres = u_lres[:2]  # (3, ckp_N, ckp_N) -> (2, ckp_N, ckp_N)
+
+        # import matplotlib.pyplot as plt
+        # from l3es.utils import comp_divergence
+        # fig, axs = plt.subplots(2, 3, figsize=(15, 10))
+        # def plt_field(ax, v, dx=None, mode=None):
+        #     # v.shape=(2,N,N) if mode="div" else (N,N)
+        #     vext=5
+        #     if mode == "div":
+        #         v = comp_divergence(v, dx)
+        #         vext=1.5
+        #     ax.imshow(v, vmin=-vext, vmax=vext)
+        #     label = "div(u)" if mode == "div" else "u"
+        #     ax.set_title(
+        #         f"{label} min/max/std: [{v.min():.2f}, {v.max():.2f}, {v.std():.2f}]"
+        #     )
+        # u_lres_inc is the u_lres after making it incompressible
+        # plt_field(axs[0,0], u_hres[0,:,:])
+        # plt_field(axs[0,1], u_lres[0,:,:])
+        # plt_field(axs[0,2], u_lres_inc[0,:,:])
+        # plt_field(axs[1,0], u_hres[:,:,:], dx=dx_dns, mode="div")
+        # plt_field(axs[1,1], u_lres[:,:,:], dx=L/ckp_N, mode="div")
+        # plt_field(axs[1,2], u_lres_inc[:,:,:], dx=L/ckp_N, mode="div")
+        # plt.tight_layout()
+        # plt.savefig(f"incompr_figure.png")
 
         u_r = interpolator(u_lres, r)
         u_r_0 = u_r.copy()
@@ -110,9 +154,10 @@ def combined(
             if debug:
                 print(f"Relax ({i},0): {u_r.max():.4f} [", end="")
             r_temp = shift_fn(r, dt * u_r)  # emulate "next step" to relax there
-            for _ in range(10):
+            dt_rlx_factor = 2  # if dt gives CFL=0.4, then 2*dt gives CFL=0.8
+            for _ in range(3):
                 # print(f"{comp_rho(r).max():.3f}, ", end='')
-                a_temp = relax_fn(r_temp)
+                a_temp = dt_rlx_factor * relax_fn(r_temp)
                 r_temp = shift_fn(r_temp, dt**2 * a_temp)
                 if debug:
                     print(f"{a_temp.max():.3f}, ", end="")

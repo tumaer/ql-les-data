@@ -3,8 +3,10 @@
 import os
 
 import jax.numpy as jnp
+import jax_cfd.base as cfd  # version 0.2.1
 import numpy as np
-from jax import jit, ops, vmap
+from jax import jit, ops, random, vmap
+from jax_cfd.collocated import initial_conditions, pressure
 from jax_sph.jax_md import space
 from jax_sph.kernel import QuinticKernel
 from jax_sph.partition import neighbor_list
@@ -246,3 +248,95 @@ def comp_vorticity(u, dx):
     dudy = np.gradient(u[0], dx, axis=1)
     dvdx = np.gradient(u[1], dx, axis=0)
     return dvdx - dudy
+
+
+def make_incompressible_real(u, N, L, target_dim=3):
+    """Make a velocity field incompressible.
+
+    Implemented only for 2D so far.
+    """
+    grid = cfd.grids.Grid((N, N), domain=((0, L), (0, L)))
+    v0 = initial_conditions.filtered_velocity_field(
+        random.PRNGKey(0), grid, 7, 4, iterations=4
+    )
+
+    v0[0].array.data = u[0]
+    v0[1].array.data = u[1]
+    v0 = pressure.projection(v0)
+
+    v0 = jnp.array([v.data for v in v0])[..., None]  # (2, N, N, 1)
+
+    if target_dim == 3:
+        v0 = jnp.concatenate([v0, jnp.zeros((1, N, N, 1))], axis=0)
+    return v0
+
+
+def make_incompressible_spectral(N, fft_axes=(1, 2, 3)):
+    """Create a function that projects velocity fields onto the incompressible manifold.
+
+    Very similar to the spectral solver code.
+    Tested only on 2D so far.
+
+    Uses spectral method with the projection operator P(k) = I - k⊗k/|k|².
+    Based on the spectralDNS implementation structure.
+    """
+    # Set up wavenumbers like in the original code
+    kx = jnp.fft.fftfreq(N, 1.0 / N)
+    kx_tuple = (kx,) * 2 if len(fft_axes) == 3 else (kx,)
+    kz = kx[: (N // 2 + 1)].copy()
+    kz = kz.at[-1].set(-1 * kz[-1])
+
+    # Create wavenumber mesh
+    kkk = jnp.array(jnp.meshgrid(*kx_tuple, kz, indexing="ij"), dtype=int)
+    if len(fft_axes) == 2:
+        kkk = jnp.concatenate([kkk, jnp.zeros((1, N, N // 2 + 1))], axis=0)
+
+    # Compute k²
+    kkk2 = jnp.sum(kkk * kkk, 0, dtype=int)
+
+    # Compute k/k² (with handling of k=0 mode)
+    kkk_over_kkk2 = kkk.astype(float) / jnp.where(kkk2 == 0, 1, kkk2).astype(float)
+
+    def project_velocity(u=None, u_hat=None):
+        """Project velocity field to be incompressible.
+
+        Args:
+            u: (3, N, N, 1) Real space velocity field (if provided)
+            u_hat: Fourier space velocity field (if provided)
+
+        Returns:
+            u_incompressible: Real space incompressible velocity
+            u_hat_incompressible: Fourier space incompressible velocity
+        """
+        if u_hat is None and u is not None:
+            # Transform to Fourier space if needed
+            u_hat = jnp.fft.rfftn(u, axes=fft_axes).squeeze()
+        elif u_hat is None and u is None:
+            raise ValueError("Must provide either u or u_hat")
+
+        # Compute the projection in Fourier space
+        # First get the divergent component
+        p_hat = jnp.sum(u_hat * kkk_over_kkk2, axis=0)
+        # Subtract it to get divergence-free field
+        u_hat_incompressible = u_hat - p_hat * kkk
+
+        # import matplotlib.pyplot as plt
+        # fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+        # def plt_field(ax, v):
+        #     ax.imshow(v, vmin=-5, vmax=5)
+        #     ax.set_title(f"div(u_hat) [{v.min():.2f}, {v.max():.2f}, {v.std():.2f}]")
+        # plt_field(axs[0,0], (u_hat.real*kkk).sum(0))
+        # plt_field(axs[0,1], (u_hat.imag*kkk).sum(0))
+        # plt_field(axs[1,0], (u_hat_incompressible.real*kkk).sum(0))
+        # plt_field(axs[1,1], (u_hat_incompressible.imag*kkk).sum(0))
+        # plt.tight_layout()
+        # plt.savefig(f"incompr_figure_spectral.png")
+
+        if u is not None:
+            # Transform back to real space if input was in real space
+            u_incompressible = jnp.fft.irfftn(u_hat_incompressible, axes=fft_axes)
+            return u_incompressible, u_hat_incompressible
+
+        return None, u_hat_incompressible
+
+    return project_velocity
