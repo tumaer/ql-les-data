@@ -1,6 +1,6 @@
 venv*/
 .venv/
-data*/
+data*
 .eggs/
 results*/
 .vscode/

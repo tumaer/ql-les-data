@@ -3,7 +3,9 @@ from time import time
 
 import jax.numpy as jnp
 import numpy as np
+from jax import vmap
 from jax_sph.io_state import write_h5, write_vtk
+from jax_sph.jax_md import space
 
 from l3es.integrator import set_up_integrator, shift_fn
 from l3es.spectral_solver import comp_dt, set_up_solver
@@ -62,6 +64,8 @@ def combined(
     r, comp_rho, interpolator, relax_fn, _, _ = set_up_integrator(
         state_0_path, dim, ckp_N, splits, u_ref
     )
+    displacement_fn, _ = space.periodic(side=L * np.ones(dim))
+    displacement_fn_sets = vmap(displacement_fn)
     accs = []
     t_int = 0.0
     t0 = time()
@@ -78,7 +82,7 @@ def combined(
             print(
                 f"Step {i}/{tstep_max}, u_max = {abs(u).max():.3f}, "
                 f"E_kin = {e_kin:.3f}, dt_est = {comp_dt(u, dx_dns, nu):.5f}, ",
-                end="",
+                end="" if log_freq >= ckp_freq else "\n",
             )
         if i % vis_freq == 0:
             plot_views(
@@ -154,17 +158,18 @@ def combined(
             if debug:
                 print(f"Relax ({i},0): {u_r.max():.4f} [", end="")
             r_temp = shift_fn(r, dt * u_r)  # emulate "next step" to relax there
-            dt_rlx_factor = 2  # if dt gives CFL=0.4, then 2*dt gives CFL=0.8
-            for _ in range(3):
+            r_temp_0 = r_temp.copy()
+            dt_factor = 2  # if dt gives CFL=0.4, then 2*dt gives CFL=0.8
+            for _ in range(2):
                 # print(f"{comp_rho(r).max():.3f}, ", end='')
-                a_temp = dt_rlx_factor * relax_fn(r_temp)
-                r_temp = shift_fn(r_temp, dt**2 * a_temp)
+                a_temp = relax_fn(r_temp)
+                r_temp = shift_fn(r_temp, (dt_factor * dt)**2 * a_temp)
                 if debug:
                     print(f"{a_temp.max():.3f}, ", end="")
 
                 if debug:
                     a_r_s.append(a_temp * dt)
-                a_r += a_temp
+                a_r += a_temp * dt_factor**2
             if debug:
                 print(f"] Relax ({i},1): {u_r.max():.4f}, {a_r.max():.4f} ")
 
@@ -173,7 +178,9 @@ def combined(
             if a_max > 100_000:
                 print("Breaking.")
                 break
-            u_r += dt * a_r
+            # because here we have a different dt, we infer vel from displacement
+            # u_r += dt * a_r  # this should actually also work
+            u_r += displacement_fn_sets(r_temp, r_temp_0) / dt
         if debug:
             u_r.block_until_ready()
         t_int += time() - t_temp

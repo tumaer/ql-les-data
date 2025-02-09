@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 
+os.environ["JAX_PLATFORMS"] = "cpu"
+
 import h5py
 import numpy as np
 from jax import vmap
@@ -109,7 +111,8 @@ def single_h5_files_to_h5_dataset(args):
         "dt": cfg.sim.dt,
         "t_end": cfg.sim.t_final,
         "viscosity": cfg.sim.nu,
-        "write_every": cfg.com.ckp_freq,
+        "u_ref": cfg.sim.u_ref,
+        "write_every": cfg.com.ckp_freq * args.slice_every_nth_frame,
         "sequence_length_train": int(sequence_length_train),
         "num_trajs_train": int(num_trajs_train),
         "sequence_length_test": int(sequence_length_test),
@@ -126,6 +129,8 @@ def single_h5_files_to_h5_dataset(args):
 
     with open(os.path.join(args.dst_dir, "metadata.json"), "w") as f:
         json.dump(metadata, f)
+    
+    print("Finished writing metadata!")
 
 
 def compute_statistics_h5(args):
@@ -201,10 +206,10 @@ def compute_statistics_h5(args):
     # stds should not be 0. If they are, set them to 1.
     vel_std = np.where(vel_std < 1e-7, 1, vel_std)
     acc_std = np.where(acc_std < 1e-7, 1, acc_std)
-    metadata["v_mean"] = vel_mean.tolist()
-    metadata["v_std"] = vel_std.tolist()
-    metadata["av_mean"] = acc_mean.tolist()
-    metadata["av_std"] = acc_std.tolist()
+    metadata["vel_mean"] = vel_mean.tolist()
+    metadata["vel_std"] = vel_std.tolist()
+    metadata["acc_mean"] = acc_mean.tolist()
+    metadata["acc_std"] = acc_std.tolist()
 
     u_std = np.where(u_std < 1e-7, 1, u_std)
     au_std = np.where(au_std < 1e-7, 1, au_std)
@@ -215,6 +220,8 @@ def compute_statistics_h5(args):
 
     with open(os.path.join(args.dst_dir, "metadata.json"), "w") as f:
         json.dump(metadata, f)
+        
+    print("Finished updating metadata!")
 
 
 if __name__ == "__main__":

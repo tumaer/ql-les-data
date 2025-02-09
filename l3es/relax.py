@@ -102,7 +102,8 @@ def relax_wrapper(N, dim=3, L=2 * np.pi, is_physical=False, u_ref=None):
             acc = -prefactor * p_ij * kernel_grad
 
             # Add transport velocity acceleration term on top (Eq. 13)
-            acc += prefactor * kernel_der / (d_ij + EPS) * (-p_eos) * r_ij
+            # 0.5 comes from the integration scheme
+            acc += 0.5 * prefactor * (-p_eos) * kernel_grad
 
             return acc
 
