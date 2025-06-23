@@ -9,7 +9,9 @@ if __name__ == "__main__":
     cfg = OmegaConf.merge(OmegaConf.load(cli_args.config), cli_args)
 
     if str(cfg.gpu) == "-1":
+        print("Running on CPU")
         os.environ["JAX_PLATFORMS"] = "cpu"
+        config.update("jax_platform_name", "cpu")
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu)
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(cfg.get("xla_mem_fraction", 0.8))
@@ -80,6 +82,7 @@ if __name__ == "__main__":
             vis_freq=cfg.com.vis_freq,
             ckp_freq=cfg.com.ckp_freq,
             seed=cfg.seed,
+            debug=cfg.com.get("debug", False),
         )
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")

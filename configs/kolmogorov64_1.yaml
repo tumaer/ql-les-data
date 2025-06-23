@@ -26,7 +26,7 @@ int:
   vis_freq: 100
 
 com:
-  log_freq: 100
+  log_freq: 10
   vis_freq: 1000
   ckp_freq: 1
   dst_path: "results_kolm64_1/"

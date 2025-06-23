@@ -97,9 +97,9 @@ def set_up_integrator(state_0_path, dim, N, splits, u_ref):
 
     comp_rho = rho_computer(N, dim=dim, L=L)
     interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=splits)
-    relax_fn = relax_wrapper(N, dim, L, is_physical=True, u_ref=u_ref)
+    relax_fn, sph_fn = relax_wrapper(N, dim, L, is_physical=True, u_ref=u_ref)
 
-    return r, comp_rho, interpolator, relax_fn, L, fft_axes
+    return r, comp_rho, interpolator, relax_fn, sph_fn, L, fft_axes
 
 
 def integrate(
@@ -134,7 +134,7 @@ def integrate(
     int_path = os.path.join(dst_path, "int")
     os.makedirs(int_path, exist_ok=True)
 
-    r, comp_rho, interpolator, relax_fn, L, fft_axes = set_up_integrator(
+    r, comp_rho, interpolator, relax_fn, _, L, fft_axes = set_up_integrator(
         state_0_path, dim, N, splits, u_ref
     )
     all_accs = {}

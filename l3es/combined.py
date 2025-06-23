@@ -3,7 +3,7 @@ from time import time
 
 import jax.numpy as jnp
 import numpy as np
-from jax import vmap
+from jax import tree_map, vmap
 from jax_sph.io_state import write_h5, write_vtk
 from jax_sph.jax_md import space
 
@@ -61,12 +61,13 @@ def combined(
     t_sim = 0.0
     tstep_max = round(t_final / dt) + 1
 
-    r, comp_rho, interpolator, relax_fn, _, _ = set_up_integrator(
+    r, comp_rho, interpolator, relax_fn, sph_fn, _, _ = set_up_integrator(
         state_0_path, dim, ckp_N, splits, u_ref
     )
     displacement_fn, _ = space.periodic(side=L * np.ones(dim))
     displacement_fn_sets = vmap(displacement_fn)
-    accs = []
+    # accs = []
+    # u_r_old = jnp.zeros_like(r)
     t_int = 0.0
     t0 = time()
 
@@ -157,30 +158,62 @@ def combined(
                 a_r_s = []
             if debug:
                 print(f"Relax ({i},0): {u_r.max():.4f} [", end="")
-            r_temp = shift_fn(r, dt * u_r)  # emulate "next step" to relax there
-            r_temp_0 = r_temp.copy()
-            dt_factor = 2  # if dt gives CFL=0.4, then 2*dt gives CFL=0.8
-            for _ in range(2):
-                # print(f"{comp_rho(r).max():.3f}, ", end='')
-                a_temp = relax_fn(r_temp)
-                r_temp = shift_fn(r_temp, (dt_factor * dt)**2 * a_temp)
-                if debug:
-                    print(f"{a_temp.max():.3f}, ", end="")
+            r_0 = r.copy()
+            is_shift_and_relax = True
+            if is_shift_and_relax:
+                r_temp = shift_fn(r_0, dt * u_r)  # emulate "next step" to relax there
+                dt_factor = 2  # if dt gives CFL=0.4, then 2*dt gives CFL=0.8
+                for _ in range(1):
+                    # print(f"{comp_rho(r).max():.3f}, ", end='')
+                    a_temp = relax_fn(r_temp)
+                    r_temp = shift_fn(r_temp, (dt_factor * dt) ** 2 * a_temp)
+                    if debug:
+                        print(f"{a_temp.max():.3f}, ", end="")
 
+                    if debug:
+                        a_r_s.append(a_temp * dt)
+                    a_r += a_temp * dt_factor**2
                 if debug:
-                    a_r_s.append(a_temp * dt)
-                a_r += a_temp * dt_factor**2
-            if debug:
-                print(f"] Relax ({i},1): {u_r.max():.4f}, {a_r.max():.4f} ")
+                    print(f"] Relax ({i},1): {u_r.max():.4f}, {a_r.max():.4f} ")
+            else:  # do an actual TVF-SPH step
+                acc = sph_fn(r_0, u_r)
+                if debug:
+                    magnitudes = tree_map(
+                        lambda x: str(jnp.linalg.norm(x).item())[:8], acc
+                    )
+                    print(f"] Relax: {magnitudes}")
+                else:
+                    if i % log_freq == 0:
+                        magnitudes = tree_map(
+                            lambda x: str(jnp.linalg.norm(x).item())[:8], acc
+                        )
+                        print(f"{magnitudes}, ", end="")
+                dudt = acc["acc_p"] + nu * acc["acc_visc"]
+                dvdt = acc["acc_tvf"]
+                u_new = u_r + dt * dudt
+                v_new = u_new + 0.5 * dt * dvdt
+                r_temp = shift_fn(r_0, dt * v_new)
 
-            a_max = a_r.max()
-            accs.append(a_max)
-            if a_max > 100_000:
-                print("Breaking.")
-                break
+                dt_factor = 1
+                for _ in range(3):
+                    # print(f"{comp_rho(r).max():.3f}, ", end='')
+                    a_temp = relax_fn(r_temp)
+                    r_temp = shift_fn(r_temp, (dt_factor * dt) ** 2 * a_temp)
+
+            # a_max = a_r.max()
+            # accs.append(a_max)
+            # if a_max > 100_000:
+            #     print("Breaking.")
+            #     break
             # because here we have a different dt, we infer vel from displacement
             # u_r += dt * a_r  # this should actually also work
-            u_r += displacement_fn_sets(r_temp, r_temp_0) / dt
+            u_r = displacement_fn_sets(r_temp, r_0) / dt
+            # print(
+            #     "magn a: ",
+            #     jnp.linalg.norm(u_r - u_r_0).item(),   # 20...30
+            #     jnp.linalg.norm(u_r_0 - u_r_old).item()  # 0,7
+            # )
+            # u_r_old = u_r_0.copy()
         if debug:
             u_r.block_until_ready()
         t_int += time() - t_temp

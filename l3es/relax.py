@@ -119,4 +119,60 @@ def relax_wrapper(N, dim=3, L=2 * np.pi, is_physical=False, u_ref=None):
         acc = denormalize_length(acc)
         return acc
 
-    return loop_body
+    @jax.jit
+    def sph_body(r, u):
+        """Same as above, but also with viscous term and separate TVF term."""
+        assert is_physical, "sph is only implemented for physical units."
+
+        nbrs = nbrs_update(r, num_particles=N_tot)
+        i_s, j_s = nbrs.idx
+        r_i_s, r_j_s = r[i_s], r[j_s]
+        dr_i_j = vmap(displacement_fn)(r_i_s, r_j_s)
+        dist = space.distance(dr_i_j)
+        w_dist = vmap(kernel_fn.w)(dist)
+
+        rho = mass * ops.segment_sum(w_dist, i_s, N_tot)
+        p = vmap(eos.p_fn)(rho)
+
+        def acceleration_fn(r_ij, d_ij, rho_i, rho_j, p_i, p_j, u_i, u_j):
+            # Compute unit vector, above eq. (6), Zhang (2017). Sign flipped here.
+            e_ij = r_ij / (d_ij + EPS)
+
+            # Compute kernel gradient
+            kernel_der = kernel_fn.grad_w(d_ij)
+            kernel_grad = kernel_der * e_ij
+
+            # Compute density-weighted pressure (weighted arithmetic mean)
+            p_ij = (rho_j * p_i + rho_i * p_j) / (rho_i + rho_j)
+
+            # Eq. (8), Adami (2012) with constant `mass`
+            prefactor = mass * ((1 / rho_i) ** 2 + (1 / rho_j) ** 2)
+            acc_p = -prefactor * p_ij * kernel_grad
+
+            u_ij = u_i - u_j
+            eta_ij = 1.0  # apply viscosity outside of this function
+            # Eq. (10), Adami (2012)
+            acc_visc = prefactor * eta_ij * u_ij / (d_ij + EPS) * kernel_der
+
+            # Add transport velocity acceleration term on top (Eq. 13)
+            # 0.5 comes from the integration scheme
+            acc_tvf = prefactor * (-p_eos) * kernel_grad
+
+            return {"acc_p": acc_p, "acc_visc": acc_visc, "acc_tvf": acc_tvf}
+
+        out = vmap(acceleration_fn)(
+            dr_i_j,
+            dist,
+            rho[i_s],
+            rho[j_s],
+            p[i_s],
+            p[j_s],
+            u[i_s],
+            u[j_s],
+        )
+        acc_p = ops.segment_sum(out["acc_p"], i_s, N_tot)
+        acc_visc = ops.segment_sum(out["acc_visc"], i_s, N_tot)
+        acc_tvf = ops.segment_sum(out["acc_tvf"], i_s, N_tot)
+        return {"acc_p": acc_p, "acc_visc": acc_visc, "acc_tvf": acc_tvf}
+
+    return loop_body, sph_body
