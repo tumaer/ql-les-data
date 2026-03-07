@@ -78,9 +78,9 @@ def rk4_wrapper(dt, rhs_fn, forcing_mask, e_kin_init, forcing_type, fft_axes=(1,
         ### Forcing for HIT case ###
 
         # Method taken from:
-        # A. G. Lamorgese and D. A. Caughey and S. B. Pope, "Direct numerical simulation
-        # of homogeneous turbulence with hyperviscosity", Physics of Fluids, 17, 1, 015106,
-        # 2005, (https://doi.org/10.1063/1.1833415)
+        # A. G. Lamorgese and D. A. Caughey and S. B. Pope, "Direct numerical
+        # simulation of homogeneous turbulence with hyperviscosity", Physics of
+        # Fluids, 17, 1, 015106, 2005, (https://doi.org/10.1063/1.1833415)
 
         # Implemented as spectralDNS does in their isotropic.py file
 
@@ -306,8 +306,9 @@ def simulate(
         ckp_N (int): How many spatial modes to keep (after spectral filtering).
         kf (int): Forcing up to wavenumber for HIT case.
         dst_path (str): Where to write results. (Destination path)
-        forcing_type (str): Forcing type for HIT case. One of ["ekin_tot", "ekin_low", "none"].
-            ekin_tot: rescale to keep total kinetic energy constant (as in Lamorgese et al. 2005).
+        forcing_type (str): Forcing type for HIT case. One of:
+            ["ekin_tot", "ekin_low", "none"].
+            ekin_tot: rescale to keep total kinetic energy constant
             ekin_low: rescale only to keep low wavenumber kinetic energy constant.
             none: no forcing.
     """
@@ -328,7 +329,8 @@ def simulate(
 
     print(
         "#" * 79,
-        f"\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}, E_kin_init={e_kin_init:.3f}\n",
+        f"\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}, "
+        + "E_kin_init={e_kin_init:.3f}\n",
         "#" * 79,
     )
     t = 0.0
@@ -361,10 +363,8 @@ def simulate(
         hit_eddy_turnover_time /= tstep
         hit_eddy_turnover_time *= kf**2
         hit_eddy_turnover_time = 1.0 / hit_eddy_turnover_time ** (1 / 3)
-        print(f"HIT eddy turnover time = {hit_eddy_turnover_time:.3f}")
-        print(
-            f"HIT number of eddy turnover times = {t_final / hit_eddy_turnover_time:.3f}"
-        )
+        print(f"Eddy turnover time = {hit_eddy_turnover_time:.3f}")
+        print(f"Number of eddy turnover times = {t_final / hit_eddy_turnover_time:.3f}")
 
     t_tot = time() - t0
     print(f"t_tot = {t_tot:.3f}, t_sim = {t_tot-t_out:.3f}")
