@@ -129,7 +129,7 @@ def single_h5_files_to_h5_dataset(args):
 
     with open(os.path.join(args.dst_dir, "metadata.json"), "w") as f:
         json.dump(metadata, f)
-    
+
     print("Finished writing metadata!")
 
 
@@ -220,7 +220,7 @@ def compute_statistics_h5(args):
 
     with open(os.path.join(args.dst_dir, "metadata.json"), "w") as f:
         json.dump(metadata, f)
-        
+
     print("Finished updating metadata!")
 
 
