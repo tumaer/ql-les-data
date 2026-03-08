@@ -43,7 +43,9 @@ if __name__ == "__main__":
             vis_freq=cfg.sim.vis_freq,
             ckp_freq=cfg.sim.ckp_freq,
             ckp_N=cfg.sim.ckp_N,
+            kf=cfg.sim.kf,
             dst_path=cfg.sim.dst_path,
+            forcing_type=cfg.sim.forcing_type,
         )
     elif cfg.mode == "integrate":
         os.makedirs(cfg.int.dst_path, exist_ok=True)

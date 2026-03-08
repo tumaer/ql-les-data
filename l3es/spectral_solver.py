@@ -6,7 +6,13 @@ from time import time
 import jax.numpy as jnp
 from jax import config, jit
 
-from l3es.init_fields import init_u_hit, init_u_kolm, init_u_tgv, init_u_tgv2d
+from l3es.init_fields import (
+    init_forcing_mask_hit,
+    init_u_hit,
+    init_u_kolm,
+    init_u_tgv,
+    init_u_tgv2d,
+)
 from l3es.utils import write_u
 from l3es.visualize import plot_e_k, plot_views
 
@@ -52,7 +58,7 @@ def rhs_wrapper(N, nu, fft_axes=(1, 2, 3)):
     return rhs_fn
 
 
-def rk4_wrapper(dt, rhs_fn, fft_axes=(1, 2, 3)):
+def rk4_wrapper(dt, rhs_fn, forcing_mask, e_kin_init, forcing_type, fft_axes=(1, 2, 3)):
     """Runge-Kutta 4th order integrator.
 
     Based on: https://github.com/spectralDNS/spectralDNS
@@ -68,10 +74,57 @@ def rk4_wrapper(dt, rhs_fn, fft_axes=(1, 2, 3)):
                 u_hat = u_temp1 + b_rk4[rk] * dt * du
             u_temp2 += a_rk4[rk] * dt * du
         u_hat = u_temp2
+
+        ### Forcing for HIT case ###
+
+        # Method taken from:
+        # A. G. Lamorgese and D. A. Caughey and S. B. Pope, "Direct numerical
+        # simulation of homogeneous turbulence with hyperviscosity", Physics of
+        # Fluids, 17, 1, 015106, 2005, (https://doi.org/10.1063/1.1833415)
+
+        # Implemented as spectralDNS does in their isotropic.py file
+
+        e_inj = 0.0
+        if forcing_mask is not None:
+            if forcing_type == "ekin_tot":
+                # current values
+                u_new = jnp.fft.irfftn(u_hat, axes=fft_axes)
+                e_kin_new = 0.5 * jnp.mean(jnp.sum(u_new * u_new, axis=0))
+
+                # low-pass filter to keep only large scales (up to kf)
+                u_lower = jnp.fft.irfftn(u_hat * forcing_mask, axes=fft_axes)
+                e_kin_lower = 0.5 * jnp.mean(jnp.sum(u_lower * u_lower, axis=0))
+
+                # high wavenumber energy to be removed
+                e_kin_high = e_kin_new - e_kin_lower
+
+                # scaling factor to add energy back to large scales
+                alpha = jnp.sqrt(
+                    jnp.maximum(0, (e_kin_init - e_kin_high) / (e_kin_lower + EPS))
+                )
+
+                # injection rate (for logging)
+                e_inj = jnp.maximum(0, (e_kin_init - e_kin_new) / dt)
+
+            elif forcing_type == "ekin_low":
+                # low-pass filter to keep only large scales (up to kf)
+                u_lower = jnp.fft.irfftn(u_hat * forcing_mask, axes=fft_axes)
+                e_kin_lower = 0.5 * jnp.mean(jnp.sum(u_lower * u_lower, axis=0))
+
+                # scaling factor to add energy back to large scales
+                alpha = jnp.sqrt(jnp.maximum(0, e_kin_init / (e_kin_lower + EPS)))
+
+                # injection rate (for logging)
+                e_inj = jnp.maximum(0, (e_kin_init - e_kin_lower) / dt)
+
+            # rescale large scales and transform back to spectral space
+            u_hat *= alpha * forcing_mask + (1 - forcing_mask)
+
         u = jnp.fft.irfftn(u_hat, axes=fft_axes)
         if len(fft_axes) == 2:
             u = jnp.expand_dims(u, -1)
-        return u, u_hat
+
+        return u, u_hat, e_inj
 
     return step_fn
 
@@ -84,7 +137,7 @@ def comp_dt(u, dx, nu, cfl=1.0):
     return dt
 
 
-def set_up_solver(N, nu, dim, case, dt, seed):
+def set_up_solver(N, nu, dim, case, dt, seed, kf, forcing_type="ekin_tot"):
     L = 2 * jnp.pi
     dx = L / N
     len_z = N if dim == 3 else 1
@@ -96,6 +149,13 @@ def set_up_solver(N, nu, dim, case, dt, seed):
     xyz_vis = (xyz.T + jnp.array([0, 0, L - dx])).T if dim == 2 else xyz
     # print(jnp.isclose(xyz,a).all(), a[:,1,0,0], xyz[:,1,0,0])
 
+    # initialize forcing mask
+    if case == "HIT" and forcing_type != "none":
+        forcing_mask = init_forcing_mask_hit(N, kf)
+    else:
+        forcing_mask = None
+
+    # initialize velocity field and its Fourier transform
     if case == "TGV":
         u = init_u_tgv(xyz[0], xyz[1], xyz[2])  # (3,N,N,N)
     elif case == "HIT":
@@ -105,6 +165,13 @@ def set_up_solver(N, nu, dim, case, dt, seed):
     elif case == "TGV2D":
         u = init_u_tgv2d(N, target_dim=3, rescale=L)
     u_hat = jnp.fft.rfftn(u, axes=fft_axes).squeeze()  # (3,N,N,N//2+1)
+
+    # compute initial kinetic energy as target for rescaling
+    if forcing_type == "ekin_low":
+        u_lower = jnp.fft.irfftn(u_hat * forcing_mask, axes=fft_axes)
+        e_kin_init = 0.5 * jnp.mean(jnp.sum(u_lower * u_lower, axis=0))
+    else:
+        e_kin_init = 0.5 * jnp.mean(jnp.sum(u * u, axis=0))
 
     ######################################################################
 
@@ -178,9 +245,16 @@ def set_up_solver(N, nu, dim, case, dt, seed):
     ######################################################################
 
     t0 = time()
-    integrate_fn = rk4_wrapper(dt, rhs_wrapper(N, nu, fft_axes), fft_axes)
+    integrate_fn = rk4_wrapper(
+        dt,
+        rhs_wrapper(N, nu, fft_axes),
+        forcing_mask,
+        e_kin_init,
+        forcing_type,
+        fft_axes,
+    )
     integrate_fn = jit(integrate_fn)
-    u, u_hat = integrate_fn(u, u_hat)
+    u, u_hat, e_inj = integrate_fn(u, u_hat)
 
     # import matplotlib.pyplot as plt
     # _, axs = plt.subplots(1, 2, figsize=(10, 5))
@@ -192,7 +266,7 @@ def set_up_solver(N, nu, dim, case, dt, seed):
     u.block_until_ready()
     print("Compilation time:", time() - t0)
 
-    return u, u_hat, xyz_vis, dx, integrate_fn, L, fft_axes
+    return u, u_hat, xyz_vis, dx, integrate_fn, L, fft_axes, e_kin_init, e_inj
 
 
 def simulate(
@@ -208,7 +282,9 @@ def simulate(
     vis_freq=10**8,
     ckp_freq=1,
     ckp_N=32,
+    kf=3,
     dst_path=None,
+    forcing_type=None,
 ):
     """Simulator wrapper.
 
@@ -228,11 +304,17 @@ def simulate(
         vis_freq (int): How often to generate visualizations.
         ckp_freq (int): How often to save the flow field.
         ckp_N (int): How many spatial modes to keep (after spectral filtering).
+        kf (int): Forcing up to wavenumber for HIT case.
         dst_path (str): Where to write results. (Destination path)
+        forcing_type (str): Forcing type for HIT case. One of:
+            ["ekin_tot", "ekin_low", "none"].
+            ekin_tot: rescale to keep total kinetic energy constant
+            ekin_low: rescale only to keep low wavenumber kinetic energy constant.
+            none: no forcing.
     """
 
-    u, u_hat, xyz_vis, dx, integrate_fn, _, _ = set_up_solver(
-        N, nu, dim, case, dt, seed
+    u, u_hat, xyz_vis, dx, integrate_fn, _, _, e_kin_init, e_inj = set_up_solver(
+        N, nu, dim, case, dt, seed, kf, forcing_type
     )
 
     dst_vis = os.path.join(dst_path, "ckp_vis")
@@ -243,7 +325,14 @@ def simulate(
     if ckp_freq < 10**6:
         write_u(u, 0, dst_ckp, ckp_N)
 
-    print("#" * 79, f"\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}")
+    hit_eddy_turnover_time = 0.0
+
+    print(
+        "#" * 79,
+        f"\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}, "
+        + "E_kin_init={e_kin_init:.3f}\n",
+        "#" * 79,
+    )
     t = 0.0
     tstep = 0
     t0 = time()
@@ -251,14 +340,17 @@ def simulate(
     while t < t_final - 1e-8:
         t += dt
         tstep += 1
-        u, u_hat = integrate_fn(u, u_hat)
+        u, u_hat, e_inj = integrate_fn(u, u_hat)
+
+        # sum up injection rate to get eddy turnover time for forced HIT case
+        hit_eddy_turnover_time += e_inj
 
         t_temp = time()
         if tstep % log_freq == 0:
-            e_kin = jnp.mean(jnp.sum(u * u, axis=0))
+            e_kin = 0.5 * jnp.mean(jnp.sum(u * u, axis=0))
             print(
                 f"step {tstep}, u_max = {abs(u).max():.3f}, E_kin = {e_kin:.3f}, "
-                f"dt_est = {comp_dt(u, dx, nu):.5f}"
+                f"dt_est = {comp_dt(u, dx, nu):.5f}, E_inj = {e_inj:.3f}"
             )
         if tstep % vis_freq == 0:
             plot_views(xyz_vis, u, dx, tstep, save_path=dst_vis, u_ref=u_ref)
@@ -266,6 +358,13 @@ def simulate(
         if tstep % ckp_freq == 0:
             write_u(u, tstep, dst_ckp, ckp_N)
         t_out += time() - t_temp
+
+    if case == "HIT" and forcing_type != "none":
+        hit_eddy_turnover_time /= tstep
+        hit_eddy_turnover_time *= kf**2
+        hit_eddy_turnover_time = 1.0 / hit_eddy_turnover_time ** (1 / 3)
+        print(f"Eddy turnover time = {hit_eddy_turnover_time:.3f}")
+        print(f"Number of eddy turnover times = {t_final / hit_eddy_turnover_time:.3f}")
 
     t_tot = time() - t0
     print(f"t_tot = {t_tot:.3f}, t_sim = {t_tot-t_out:.3f}")

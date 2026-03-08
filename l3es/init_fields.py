@@ -86,6 +86,30 @@ def init_u_hit(N, seed=42):
     return u
 
 
+def init_forcing_mask_hit(N, kf=3):
+    """Initialize a wavenumber mask for constant energy forcing in HIT."""
+
+    # 1D wavenumber grid
+    k1 = jnp.fft.fftfreq(N, 1.0 / N)
+
+    # since we use rfftn, the last axis is truncated to N//2+1
+    k3 = k1[: N // 2 + 1].copy()
+    k3 = k3.at[-1].set(
+        -1 * k3[-1]
+    )  # set the last element to negative to get correct wavenumber
+
+    # 3D wavenumber grid
+    k1k2k3 = jnp.asarray(jnp.meshgrid(k1, k1, k3, indexing="ij"))
+
+    # compute squared wavenumber magnitude
+    k_mag = jnp.sum(k1k2k3**2, axis=0)
+
+    # create mask for wavenumbers in the forcing range
+    mask = (k_mag <= kf**2) & (k_mag > 0)
+
+    return mask
+
+
 def init_u_kolm(N, L=2 * np.pi, max_velocity=7, seed=42, target_dim=3, iter=4):
     """Kolgomorov 2D field initialization. Based on
     https://github.com/google/jax-cfd/blob/0c17e3855702f884265b97bd6ff0793c34f3155e/jax_cfd/collocated/initial_conditions_test.py

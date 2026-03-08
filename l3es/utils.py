@@ -240,6 +240,34 @@ def comp_divergence(u, dx, version=2):
         return res
 
 
+def comp_divergence_3d(u, dx, version=2):
+    """Computes divergence of vector field
+    u (array) -> vector field components [Fx,Fy,Fz,...]
+    dx (float) -> spacing between points in every directions
+    """
+    if version == 0:
+        num_dims = len(u)
+        return np.ufunc.reduce(
+            np.add, [np.gradient(u[i], dx, axis=i) for i in range(num_dims)]
+        )
+    elif version == 1:
+        dudx = np.gradient(u[0], dx, axis=0)
+        dvdy = np.gradient(u[1], dx, axis=1)
+        dwdz = np.gradient(u[2], dx, axis=2)
+        return dudx + dvdy + dwdz
+    elif version == 2:  # this version by construction zeros out the boundaries
+        res = np.zeros_like(u[0])
+        res[1:-1, 1:-1, 1:-1] = (
+            u[0, 2:, 1:-1, 1:-1]
+            - u[0, :-2, 1:-1, 1:-1]
+            + u[1, 1:-1, 2:, 1:-1]
+            - u[1, 1:-1, :-2, 1:-1]
+            + u[2, 1:-1, 1:-1, 2:]
+            - u[2, 1:-1, 1:-1, :-2]
+        ) / (2 * dx)
+        return res
+
+
 def comp_vorticity(u, dx):
     """Computes vorticity of vector field
     u (array) -> vector field components [Fx,Fy,Fz,...]
@@ -248,6 +276,25 @@ def comp_vorticity(u, dx):
     dudy = np.gradient(u[0], dx, axis=1)
     dvdx = np.gradient(u[1], dx, axis=0)
     return dvdx - dudy
+
+
+def comp_vorticity_3d(u, dx):
+    """Computes vorticity of vector field
+    u (array) -> vector field components [Fx,Fy,Fz,...]
+    dx (float) -> spacing between points in every directions
+    """
+    dudy = np.gradient(u[0], dx, axis=1)
+    dvdx = np.gradient(u[1], dx, axis=0)
+    dudz = np.gradient(u[0], dx, axis=2)
+    dwdx = np.gradient(u[2], dx, axis=0)
+    dvdz = np.gradient(u[1], dx, axis=2)
+    dwdy = np.gradient(u[2], dx, axis=1)
+
+    vort_x = dwdy - dvdz
+    vort_y = dudz - dwdx
+    vort_z = dvdx - dudy
+
+    return np.array([vort_x, vort_y, vort_z])
 
 
 def make_incompressible_real(u, N, L, target_dim=3):
