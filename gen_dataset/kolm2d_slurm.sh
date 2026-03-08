@@ -26,3 +26,15 @@ python ../main.py config=../configs/kolmogorov64_1.yaml mode=combined seed=$seed
     com.dst_path=$DATA_ROOT/raw/2D_KOLM_4096/traj_${seed}
 
 # Run with: cd gen_dataset && sbatch --array=0-3 kolm2d_slurm.sh
+
+# # # second version of dataset
+# python gen_dataset/gen_dataset.py --split=2_1_1 --skip_first_n_frames=1000 \
+#     --src_dir=dataset_kolm/raw/2D_KOLM_4096 \
+#     --dst_dir=dataset_kolm/datasets/2D_KOLM_4096
+
+# python gen_dataset/gen_dataset.py --split=2_1_1 --skip_first_n_frames=1000 \
+#     --dst_dir=dataset_kolm/datasets/2D_KOLM_4096 \
+#     --stats_eveery_nth=10 --only_state
+# python gen_dataset/gen_dataset.py --split=2_1_1 --skip_first_n_frames=1000 \
+#     --dst_dir=dataset_kolm/datasets/2D_KOLM_4096 \
+#     --stats_eveery_nth=100 --only_state
