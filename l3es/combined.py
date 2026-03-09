@@ -14,6 +14,7 @@ from l3es.utils import (
     make_incompressible_real,
     make_incompressible_spectral,
     spectral_filtering,
+    write_u,
 )
 from l3es.visualize import plot_e_k, plot_views
 
@@ -27,6 +28,7 @@ def combined(
     dim=3,
     nu=0.000625,
     t_final=0.1,
+    burnin=0,
     dt=0.01,
     splits=8,
     u_ref=4.0,
@@ -36,6 +38,8 @@ def combined(
     ckp_freq=100,
     seed=42,
     debug=False,
+    kf=3,
+    forcing_type=None,
 ):
     """Integrate SPH particles along prescribed velocity field.
 
@@ -44,6 +48,7 @@ def combined(
         dst_path (str): Path to the directory where the integrated files will be saved.
         N (int): Number of particles in each dimension.
         dim (int): Dimension.
+        burnin (int): Number of initial steps before full run starts.
         dt (float): Integration time step.
         splits (int): Into how many parts to split 'r' before vmap-ing.
         relax (bool): whether to relax the coordinates.
@@ -53,13 +58,14 @@ def combined(
     int_path = os.path.join(dst_path, "com")
     os.makedirs(int_path, exist_ok=True)
 
-    u, u_hat, xyz_vis, dx_dns, integrate_fn, L, fft_axes = set_up_solver(
-        N, nu, dim, case, dt, seed
+    u, u_hat, xyz_vis, dx_dns, integrate_fn, L, fft_axes, ek_ini, e_inj = set_up_solver(
+        N, nu, dim, case, dt, seed, ckp_N, kf, forcing_type
     )
-    print("#" * 79, f"\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}")
-    t = 0.0
-    t_sim = 0.0
-    tstep_max = round(t_final / dt) + 1
+    hit_eddy_turnover_time = 0.0
+    print(
+        f"{'#' * 79}\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}",
+        f"E_kin_init={ek_ini:.3f}\n{'#' * 79}",
+    )
 
     r, comp_rho, interpolator, relax_fn, sph_fn, _, _ = set_up_integrator(
         state_0_path, dim, ckp_N, splits, u_ref
@@ -68,26 +74,41 @@ def combined(
     displacement_fn_sets = vmap(displacement_fn)
     # accs = []
     # u_r_old = jnp.zeros_like(r)
-    t_int = 0.0
-    t0 = time()
+    t_sim, t_int, t0 = 0.0, 0.0, time()
+    tstep_max = round(t_final / dt) + 1
 
     for i in range(tstep_max):
-        t += dt
+        if i == burnin:
+            write_u(u, i, dst_path, N, suffix="_burnin")
         t_temp = time()
-        u, u_hat = integrate_fn(u, u_hat)
+        u, u_hat, e_inj = integrate_fn(u, u_hat)
         u.block_until_ready()
         t_sim += time() - t_temp
+
+        # sum up injection rate to get eddy turnover time for forced HIT case
+        hit_eddy_turnover_time += e_inj
 
         if i % log_freq == 0:
             e_kin = jnp.mean(jnp.sum(u * u, axis=0))
             print(
                 f"Step {i}/{tstep_max}, u_max = {abs(u).max():.3f}, "
                 f"E_kin = {e_kin:.3f}, dt_est = {comp_dt(u, dx_dns, nu):.5f}, ",
+                f"E_inj = {e_inj:.3f}",
                 end="" if log_freq >= ckp_freq else "\n",
             )
-        if i % vis_freq == 0:
+        if i % vis_freq == 0:  # grid field
+            if dim == 2:
+                u_ckp = spectral_filtering(u[:2].squeeze(), ckp_N)[..., None]
+            else:
+                u_ckp = spectral_filtering(u, ckp_N)
             plot_views(
-                xyz_vis, u, dx_dns, i, save_path=vis_path, u_ref=u_ref, suffix="_dns"
+                xyz_vis,
+                u_ckp,
+                dx_dns,
+                i,
+                save_path=vis_path,
+                u_ref=u_ref,
+                suffix="_dns",
             )
             plot_e_k(
                 u, i, save_path=vis_path, dim=dim, ylims=(1e-8, 1e2), suffix="_dns"
@@ -162,7 +183,7 @@ def combined(
             is_shift_and_relax = True
             if is_shift_and_relax:
                 r_temp = shift_fn(r_0, dt * u_r)  # emulate "next step" to relax there
-                dt_factor = 2  # if dt gives CFL=0.4, then 2*dt gives CFL=0.8
+                dt_factor = 2**0.5  # if dt gives CFL=0.4, then 2*dt gives CFL=0.8
                 for _ in range(1):
                     # print(f"{comp_rho(r).max():.3f}, ", end='')
                     a_temp = relax_fn(r_temp)
@@ -237,7 +258,7 @@ def combined(
                 write_vtk(out_dict, os.path.join(int_path, f"step_{i:05d}.vtk"))
                 print(f"Step {i}/{tstep_max}, rho_max={out_dict['rho'].max():.3f}.")
 
-        if i % vis_freq == 0:
+        if i % vis_freq == 0:  # particle field
             r_vis = (r.T).reshape(*u_lres.shape)
             u_vis = (u_r_0.T).reshape(*u_lres.shape)
             if dim == 2:
@@ -270,6 +291,13 @@ def combined(
             print(f"Step {i}/{tstep_max} done.")
 
         r = shift_fn(r, dt * u_r)
+
+    if case == "HIT" and forcing_type != "none":
+        hit_eddy_turnover_time /= i
+        hit_eddy_turnover_time *= kf**2
+        hit_eddy_turnover_time = 1.0 / hit_eddy_turnover_time ** (1 / 3)
+        print(f"Eddy turnover time = {hit_eddy_turnover_time:.3f}")
+        print(f"Number of eddy turnover times = {t_final / hit_eddy_turnover_time:.3f}")
 
     t_tot = time() - t0
     print(f"t_tot = {t_tot:.3f}, t_sim = {t_sim}, t_int = {t_int:.3f}")

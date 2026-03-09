@@ -208,13 +208,13 @@ def plot_kinetic_energy_spectrum_at_time(
 
 
 if __name__ == "__main__":
-    dataset_path = Path("../results/kolm64_1/trajs4.nc")
-    fig_dir = Path("../results/kolm64_1/figs")
+    dataset_path = Path("results/kolm64_1/trajs.nc")
+    fig_dir = Path("results/kolm64_1/figs")
     fig_dir.mkdir(parents=True, exist_ok=True)
     print_dataset_shapes(dataset_path)
     ds = xarray_open(dataset_path)
     plt_u_max_per_timestep(ds, fig_dir=fig_dir)
-    for i in range(4):
+    for i in range(3):
         plot_vorticity_frames(ds, num_frames=5, sample_index=i, fig_dir=fig_dir)
     plt_ekin_evolution(ds, fig_dir=fig_dir)
     plot_kinetic_energy_spectrum_at_time(ds, time_index=0, fig_dir=fig_dir)

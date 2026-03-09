@@ -1,4 +1,8 @@
-mode: simulate  # [simulate, integrate]
+# Every 1 step is recorded
+# for comparison with JAX-CFD:
+# python main.py config=configs/kolmogorov64_1.yaml sim.t_final=22 sim.ckp_freq=70 \
+#     sim.dst_path=results/kolm64_1 seed=1
+mode: simulate  # [simulate, integrate, combined]
 gpu: 0
 float64: True
 xla_mem_fraction: 0.5
@@ -6,27 +10,32 @@ seed: 42
 
 sim:
   case: "Kolm"
-  N: 256
+  N: 512
   dim: 2
   nu: 0.001  # from JAX-CFD
-  t_final: 10.5  # +0.5 to remove the first 1k steps
-  dt: 0.0005  # h/11U = 2pi/64/(11*7) = 0.001275 => 0.001; JAX-CFD(nu=0.001, 256^2, v_max=7) leads to dt=0.00175
-  u_ref: 7.0
-  log_freq: 100
-  vis_freq: 100
-  ckp_freq: 1000000
+  t_final: 18.5  # first 4.5 will be removed
+  burnin: 4500  # burnin steps - record full HD state after that many steps
+  # dt_SPH: h/11U = 2pi/64/(11*6) = 0.00149 => 0.001 at CFL=0.66; 
+  # dt_JAX-CFD(nu=0.001, 256^2, v_max=7, CFL=0.5) leads to dt=0.00175
+  # dt_JAX-CFD: h/U = 2pi/512/6 = 0.00205 => 0.001 at CFL=0.5
+  dt: 0.001
+  u_ref: 6.0
   ckp_N: 64
-  dst_path: "results_kolm64_1/"
+  log_freq: 100
+  vis_freq: 1000
+  ckp_freq: 1
+  dst_path: "results/kolm64_1/"
 
 int:
-  dst_path: "results_kolm64_1/"
   state_0_path: "data_relaxed/rlx_2_0.0981747704_0.h5"
   splits: 8
   relax: True
   vis_freq: 100
+  dst_path: "results/kolm64_1/"
 
 com:
-  log_freq: 10
+  burnin: 4500
+  log_freq: 100
   vis_freq: 1000
   ckp_freq: 1
-  dst_path: "results_kolm64_1/"
+  dst_path: "results/kolm64_1/"

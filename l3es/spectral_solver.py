@@ -13,7 +13,7 @@ from l3es.init_fields import (
     init_u_tgv,
     init_u_tgv2d,
 )
-from l3es.utils import write_u
+from l3es.utils import spectral_filtering, write_u
 from l3es.visualize import plot_e_k, plot_views
 
 EPS = jnp.finfo(float).eps
@@ -137,7 +137,7 @@ def comp_dt(u, dx, nu, cfl=1.0):
     return dt
 
 
-def set_up_solver(N, nu, dim, case, dt, seed, kf, forcing_type="ekin_tot"):
+def set_up_solver(N, nu, dim, case, dt, seed, ckp_N, kf, forcing_type="ekin_tot"):
     L = 2 * jnp.pi
     dx = L / N
     len_z = N if dim == 3 else 1
@@ -146,7 +146,10 @@ def set_up_solver(N, nu, dim, case, dt, seed, kf, forcing_type="ekin_tot"):
     # a = jnp.mgrid[:N, :N, :len_z].astype(float) * L / N  # (3,N,N,N)
     xyz = jnp.meshgrid(jnp.arange(N), jnp.arange(N), jnp.arange(len_z), indexing="ij")
     xyz = jnp.array(xyz) * L / N
-    xyz_vis = (xyz.T + jnp.array([0, 0, L - dx])).T if dim == 2 else xyz
+    x = jnp.arange(ckp_N)
+    xyz_vis = jnp.meshgrid(x, x, jnp.arange(len_z), indexing="ij")
+    xyz_vis = jnp.array(xyz_vis) * L / N
+    xyz_vis = (xyz_vis.T + jnp.array([0, 0, L - dx])).T if dim == 2 else xyz_vis
     # print(jnp.isclose(xyz,a).all(), a[:,1,0,0], xyz[:,1,0,0])
 
     # initialize forcing mask
@@ -275,6 +278,7 @@ def simulate(
     dim=3,
     nu=0.000625,
     t_final=0.1,
+    burnin=0,
     dt=0.01,
     u_ref=1.0,
     seed=42,
@@ -295,6 +299,7 @@ def simulate(
         dim (int): Dimension.
         nu (float): Viscosity = 1/Re. nu=0.000625 for Re=1600.
         t_final (float): Final time.
+        burnin (int): Number of initial steps before full run starts.
         dt (float): Integration time step. N=64, Re=1600: dt=0.031 last stable; computed
             dt=0.027 (CFL=1.15); we use dt=0.01 (CFL=0.37).  N=192, Re=1600: computed
             dt=0.0087
@@ -305,69 +310,75 @@ def simulate(
         ckp_freq (int): How often to save the flow field.
         ckp_N (int): How many spatial modes to keep (after spectral filtering).
         kf (int): Forcing up to wavenumber for HIT case.
-        dst_path (str): Where to write results. (Destination path)
         forcing_type (str): Forcing type for HIT case. One of:
             ["ekin_tot", "ekin_low", "none"].
             ekin_tot: rescale to keep total kinetic energy constant
             ekin_low: rescale only to keep low wavenumber kinetic energy constant.
             none: no forcing.
+        dst_path (str): Where to write results. (Destination path)
     """
 
     u, u_hat, xyz_vis, dx, integrate_fn, _, _, e_kin_init, e_inj = set_up_solver(
-        N, nu, dim, case, dt, seed, kf, forcing_type
+        N, nu, dim, case, dt, seed, ckp_N, kf, forcing_type
     )
 
     dst_vis = os.path.join(dst_path, "ckp_vis")
     dst_ckp = os.path.join(dst_path, "ckp")
     if vis_freq < 10**6:
         plot_e_k(u, 0, save_path=dst_vis, dim=dim, ylims=(1e-8, 1e2))
-        plot_views(xyz_vis, u, dx, 0, save_path=dst_vis, u_ref=u_ref)
+        if dim == 2:
+            u_ckp = spectral_filtering(u[:2].squeeze(), ckp_N)[..., None]
+        else:
+            u_ckp = spectral_filtering(u, ckp_N)
+        plot_views(xyz_vis, u_ckp, dx, 0, save_path=dst_vis, u_ref=u_ref)
     if ckp_freq < 10**6:
         write_u(u, 0, dst_ckp, ckp_N)
 
     hit_eddy_turnover_time = 0.0
 
     print(
-        "#" * 79,
-        f"\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}, "
-        + "E_kin_init={e_kin_init:.3f}\n",
-        "#" * 79,
+        f"{'#' * 79}\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}, ",
+        f"E_kin_init={e_kin_init:.3f}\n{'#' * 79}",
     )
-    t = 0.0
-    tstep = 0
-    t0 = time()
-    t_out = 0.0
-    while t < t_final - 1e-8:
-        t += dt
-        tstep += 1
+    t_sim, t0 = 0, time()
+    tstep_max = round(t_final / dt) + 1
+
+    for i in range(tstep_max):
+        if i == burnin:
+            write_u(u, i, dst_path, N, suffix="_burnin")
+        t_temp = time()
         u, u_hat, e_inj = integrate_fn(u, u_hat)
+        u.block_until_ready()
+        t_sim += time() - t_temp
 
         # sum up injection rate to get eddy turnover time for forced HIT case
         hit_eddy_turnover_time += e_inj
 
-        t_temp = time()
-        if tstep % log_freq == 0:
+        if i % log_freq == 0:
             e_kin = 0.5 * jnp.mean(jnp.sum(u * u, axis=0))
             print(
-                f"step {tstep}, u_max = {abs(u).max():.3f}, E_kin = {e_kin:.3f}, "
+                f"step {i}, u_max = {abs(u).max():.3f}, E_kin = {e_kin:.3f}, "
                 f"dt_est = {comp_dt(u, dx, nu):.5f}, E_inj = {e_inj:.3f}"
             )
-        if tstep % vis_freq == 0:
-            plot_views(xyz_vis, u, dx, tstep, save_path=dst_vis, u_ref=u_ref)
-            plot_e_k(u, tstep, save_path=dst_vis, dim=dim, ylims=(1e-8, 1e2))
-        if tstep % ckp_freq == 0:
-            write_u(u, tstep, dst_ckp, ckp_N)
-        t_out += time() - t_temp
+        if i % vis_freq == 0:
+            if dim == 2:
+                u_ckp = spectral_filtering(u[:2].squeeze(), ckp_N)[..., None]
+            else:
+                u_ckp = spectral_filtering(u, ckp_N)
+            plot_views(xyz_vis, u_ckp, dx, i, save_path=dst_vis, u_ref=u_ref)
+            plot_e_k(u, i, save_path=dst_vis, dim=dim, ylims=(1e-8, 1e2))
+        if i % ckp_freq == 0:
+            write_u(u, i, dst_ckp, ckp_N)
 
     if case == "HIT" and forcing_type != "none":
-        hit_eddy_turnover_time /= tstep
+        hit_eddy_turnover_time /= i
         hit_eddy_turnover_time *= kf**2
         hit_eddy_turnover_time = 1.0 / hit_eddy_turnover_time ** (1 / 3)
         print(f"Eddy turnover time = {hit_eddy_turnover_time:.3f}")
         print(f"Number of eddy turnover times = {t_final / hit_eddy_turnover_time:.3f}")
 
     t_tot = time() - t0
-    print(f"t_tot = {t_tot:.3f}, t_sim = {t_tot-t_out:.3f}")
+    print(f"t_tot = {t_tot:.3f}, t_sim = {t_sim:.3f}")
 
     # Validation case with reference kinetic energy value.
     if t_final == 0.1 and case == "TGV":

@@ -8,7 +8,7 @@ with open("results/kolm64_1/config.yaml", "r") as f:
     meta = yaml.load(f, Loader=yaml.FullLoader)
 
 burnin = 65  # 65
-trajs = 4  # 3
+trajs = 3  # 3
 
 n_times = len(os.listdir("results/kolm64_1/ckp")) - burnin
 u = np.zeros((2, trajs, n_times, 64, 64))  # (Dim, Trajs, Time, X, Y)
@@ -36,4 +36,4 @@ ds = xarray.Dataset(
     attrs={"description": "Synthetic dataset for testing"},
 )
 print(f"Dataset: \n{ds}")
-ds.to_netcdf(f"results/kolm64_1/trajs{trajs}.nc")
+ds.to_netcdf("results/kolm64_1/trajs.nc")

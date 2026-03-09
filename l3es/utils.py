@@ -138,7 +138,7 @@ def spectral_filtering(u, ckp_N):
     return y_ifft
 
 
-def write_u(u, tstep, dst_path, ckp_N):
+def write_u(u, tstep, dst_path, ckp_N, suffix=""):
     """Write flow field to disk.
 
     Args:
@@ -148,8 +148,8 @@ def write_u(u, tstep, dst_path, ckp_N):
         ckp_N (int): How many spatial modes to keep (after spectral filtering).
 
     Writes:
-        u_{ckp_N}_{tstep:05d}.npy: Flow field of shape (3, N_sub, N_sub, N_sub) or
-            (2, N_sub, N_sub)
+        u_{ckp_N}_{tstep:05d}{suffix}.npy: Flow field of shape (3, N_sub, N_sub, N_sub)
+            or (2, N_sub, N_sub)
     """
 
     N_u = u.shape[1]
@@ -162,7 +162,7 @@ def write_u(u, tstep, dst_path, ckp_N):
 
     # Save to disk
     os.makedirs(dst_path, exist_ok=True)
-    file_path = os.path.join(dst_path, f"u_{ckp_N}_{tstep:05d}.npy")
+    file_path = os.path.join(dst_path, f"u_{ckp_N}_{tstep:05d}{suffix}.npy")
     np.save(file_path, y_ifft)
 
 
