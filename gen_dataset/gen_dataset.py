@@ -88,18 +88,18 @@ def single_h5_files_to_h5_dataset(args):
             pos_shape = position.shape
             hf.create_dataset(f"{traj_str}/particle_type", data=particle_type)
             hf.create_dataset(
-                f"{traj_str}/u", 
-                data=velocity, 
-                dtype=np.float32, 
+                f"{traj_str}/u",
+                data=velocity,
+                dtype=np.float32,
                 compression="gzip",
-                chunks=(1, pos_shape[1], pos_shape[2])
+                chunks=(1, pos_shape[1], pos_shape[2]),
             )
             hf.create_dataset(
                 f"{traj_str}/position",
                 data=position,
                 dtype=np.float32,
                 compression="gzip",
-                chunks=(1, pos_shape[1], pos_shape[2])
+                chunks=(1, pos_shape[1], pos_shape[2]),
             )
 
         hf.close()
@@ -171,8 +171,8 @@ def compute_statistics_h5(args):
             for _, v in hf.items():
                 tag = v.get("particle_type")[:]
                 fluid_tags = tag == 0  # only fluid ("0") particles
-                r = v["position"][::args.stats_every_nth][:, fluid_tags]
-                u = v["u"][::args.stats_every_nth][:, fluid_tags]
+                r = v["position"][:: args.stats_every_nth][:, fluid_tags]
+                u = v["u"][:: args.stats_every_nth][:, fluid_tags]
 
                 # The velocity and acceleration computation is based on an
                 # inversion of Semi-Implicit Euler
@@ -247,7 +247,7 @@ if __name__ == "__main__":
     parser.add_argument("--slice_every_nth_frame", type=int, default=1)
     parser.add_argument("--is_visualize", action="store_true")
     parser.add_argument("--stats_every_nth", type=int, default=1)
-    parser.add_argument("--only_stats", action="store_true",)
+    parser.add_argument("--only_stats", action="store_true")
     args = parser.parse_args()
 
     assert args.slice_every_nth_frame == 1 or args.stats_every_nth == 1, (

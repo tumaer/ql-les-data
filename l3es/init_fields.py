@@ -132,5 +132,5 @@ def init_u_kolm(N, L=2 * np.pi, max_velocity=4.2, seed=42, target_dim=3, iter=4)
     v0 = spectral_filtering(v0.squeeze(), N)[..., None]  # (2, N, N, 1)
 
     if target_dim == 3:
-        v0 = jnp.concatenate([v0, jnp.zeros((1, N, N, 1))], axis=0) # (3, N, N, 1)
+        v0 = jnp.concatenate([v0, jnp.zeros((1, N, N, 1))], axis=0)  # (3, N, N, 1)
     return v0
