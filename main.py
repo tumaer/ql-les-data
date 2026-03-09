@@ -38,6 +38,7 @@ if __name__ == "__main__":
             t_final=cfg.sim.t_final,
             dt=cfg.sim.dt,
             u_ref=cfg.sim.u_ref,
+            e_kin_target=cfg.sim.e_kin_target,
             seed=cfg.seed,
             log_freq=cfg.sim.log_freq,
             vis_freq=cfg.sim.vis_freq,

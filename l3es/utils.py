@@ -297,6 +297,24 @@ def comp_vorticity_3d(u, dx):
     return np.array([vort_x, vort_y, vort_z])
 
 
+def comp_dissipation_rate(u_hat, nu):
+    """Computes exact physical dissipation directly from the 3D spectral gradients."""
+    n = u_hat.shape[1]
+    fft_axes = (1, 2, 3)
+
+    # wavenumber grid setup (same as in spectral solver)
+    kx = jnp.fft.fftfreq(n, 1.0 / n)
+    kz = kx[: (n // 2 + 1)].copy()
+    kz = kz.at[-1].set(-1 * kz[-1])
+    kkk = jnp.array(jnp.meshgrid(kx, kx, kz, indexing="ij"), dtype=int)
+
+    # spectral curl
+    curl = jnp.fft.irfftn(1j * jnp.cross(kkk, u_hat, axis=0), axes=fft_axes)
+
+    # nu * < |omega|^2 >
+    return nu * jnp.mean(jnp.sum(curl**2, axis=0))
+
+
 def make_incompressible_real(u, N, L, target_dim=3):
     """Make a velocity field incompressible.
 
