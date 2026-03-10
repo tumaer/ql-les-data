@@ -39,7 +39,7 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
     dim = 2 if u.shape[-1] == 1 else 3
     if dim == 3:
         projection = "3d"
-        mask = (x > 2 * np.pi - 1.4 * dx) + (y < 1.4 * dx) + (z > 2 * np.pi - 1.4 * dx)
+        mask = (x > 2 * np.pi - 1.4 * dx) | (y < 1.4 * dx) | (z > 2 * np.pi - 1.4 * dx)
         xyz_ = (x[mask], y[mask], z[mask])
 
         if field2 is None:
@@ -125,7 +125,10 @@ def plot_e_k(u, step, save_path=None, dim=3, ylims=(1e-4, 1e1), suffix=""):
     ax.axvline(n // 3, c="tab:green", ls="--", label="N/3")
     ax.plot(k, ek[1:])
     ax.set_title("E(k) with k=(0, n]")
-    ax.plot(k, k ** (-5 / 3), "--", c="k", label="k**(-5/3)")
+    if dim == 3:
+        ax.plot(k, k ** (-5 / 3), "--", c="k", label="k**(-5/3)")
+    else:
+        ax.plot(k, k ** (-2.0), "--", c="k", label="k**(-2)")
 
     ax.grid()
     ax.set_xscale("log")

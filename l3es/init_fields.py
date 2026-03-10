@@ -4,6 +4,8 @@ import numpy as np
 from jax import random
 from jax_cfd.collocated import initial_conditions
 
+from l3es.utils import spectral_filtering
+
 EPS = jnp.finfo(float).eps
 
 
@@ -110,14 +112,14 @@ def init_forcing_mask_hit(N, kf=3):
     return mask
 
 
-def init_u_kolm(N, L=2 * np.pi, max_velocity=7, seed=42, target_dim=3, iter=4):
+def init_u_kolm(N, L=2 * np.pi, max_velocity=4.2, seed=42, target_dim=3, iter=4):
     """Kolgomorov 2D field initialization. Based on
     https://github.com/google/jax-cfd/blob/0c17e3855702f884265b97bd6ff0793c34f3155e/jax_cfd/collocated/initial_conditions_test.py
 
     The `iter` that work well in 2D are [4, 9, 12, 13, 18, ...]. Not sure why
     the default is 3. Some intermediate values of `iter` blow up completely!?
     """
-    grid = cfd.grids.Grid((N, N), domain=((0, L), (0, L)))
+    grid = cfd.grids.Grid((2048, 2048), domain=((0, L), (0, L)))
 
     # Fails: from jax_cfd.base import initial_conditions
     # Works: from jax_cfd.collocated import initial_conditions
@@ -126,6 +128,9 @@ def init_u_kolm(N, L=2 * np.pi, max_velocity=7, seed=42, target_dim=3, iter=4):
     )
     v0 = jnp.array([v.data for v in v0])[..., None]  # (2, N, N, 1)
 
+    # spectrally filter down to N x N
+    v0 = spectral_filtering(v0.squeeze(), N)[..., None]  # (2, N, N, 1)
+
     if target_dim == 3:
-        v0 = jnp.concatenate([v0, jnp.zeros((1, N, N, 1))], axis=0)
+        v0 = jnp.concatenate([v0, jnp.zeros((1, N, N, 1))], axis=0)  # (3, N, N, 1)
     return v0

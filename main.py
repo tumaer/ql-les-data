@@ -36,6 +36,7 @@ if __name__ == "__main__":
             dim=cfg.sim.dim,
             nu=cfg.sim.nu,
             t_final=cfg.sim.t_final,
+            burnin=cfg.sim.get("burnin", 0),
             dt=cfg.sim.dt,
             u_ref=cfg.sim.u_ref,
             e_kin_target=cfg.sim.e_kin_target,
@@ -44,9 +45,9 @@ if __name__ == "__main__":
             vis_freq=cfg.sim.vis_freq,
             ckp_freq=cfg.sim.ckp_freq,
             ckp_N=cfg.sim.ckp_N,
-            kf=cfg.sim.kf,
             dst_path=cfg.sim.dst_path,
-            forcing_type=cfg.sim.forcing_type,
+            kf=cfg.sim.get("kf", None),
+            forcing_type=cfg.sim.get("forcing_type", "none"),
         )
     elif cfg.mode == "integrate":
         os.makedirs(cfg.int.dst_path, exist_ok=True)
@@ -77,6 +78,7 @@ if __name__ == "__main__":
             dim=cfg.sim.dim,
             nu=cfg.sim.nu,
             t_final=cfg.sim.t_final,
+            burnin=cfg.sim.get("burnin", 0),
             dt=cfg.sim.dt,
             splits=cfg.int.splits,
             u_ref=cfg.sim.u_ref,
@@ -86,6 +88,8 @@ if __name__ == "__main__":
             ckp_freq=cfg.com.ckp_freq,
             seed=cfg.seed,
             debug=cfg.com.get("debug", False),
+            kf=cfg.sim.get("kf", None),
+            forcing_type=cfg.sim.get("forcing_type", "none"),
         )
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")
