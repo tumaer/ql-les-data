@@ -137,7 +137,9 @@ def comp_dt(u, dx, nu, cfl=1.0):
     return dt
 
 
-def set_up_solver(N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target=1.0, forcing_type="ekin_tot"):
+def set_up_solver(
+    N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target=1.0, forcing_type="ekin_tot"
+):
     L = 2 * jnp.pi
     dx = L / N
     len_z = N if dim == 3 else 1
@@ -343,7 +345,7 @@ def simulate(
         write_u(u, 0, dst_ckp, ckp_N)
 
     e_inj_acc = 0.0
-    e_diss_rate = 0.0
+    # e_diss_rate = 0.0
 
     print(
         f"{'#' * 79}\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}, ",
@@ -383,7 +385,7 @@ def simulate(
             write_u(u, i, dst_ckp, ckp_N)
 
     if case == "HIT" and forcing_type != "none":
-        hit_eddy_turnover_time /= i
+        hit_eddy_turnover_time = e_inj_acc / i
         hit_eddy_turnover_time *= kf**2
         hit_eddy_turnover_time = 1.0 / hit_eddy_turnover_time ** (1 / 3)
         print(f"Eddy turnover time =            {hit_eddy_turnover_time:.3f}")
