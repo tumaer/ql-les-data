@@ -7,11 +7,12 @@ sim:
   case: "HIT"
   N: 64
   dim: 3
-  nu: 0.01  # 1/1600=1/Re
+  nu: 0.015  # 1/1600=1/Re
   # DNS so that the Kolmogorov scale is resolved k_max*eta > 1, where k_max = N/3 and eta = 1/Re^(3/4)
   t_final: 100.0
   dt: 0.01
   u_ref: 4.0
+  e_kin_target: 1.25
   log_freq: 100
   vis_freq: 5000
   ckp_freq: 5000

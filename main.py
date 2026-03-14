@@ -39,6 +39,7 @@ if __name__ == "__main__":
             burnin=cfg.sim.get("burnin", 0),
             dt=cfg.sim.dt,
             u_ref=cfg.sim.u_ref,
+            e_kin_target=cfg.sim.e_kin_target,
             seed=cfg.seed,
             log_freq=cfg.sim.log_freq,
             vis_freq=cfg.sim.vis_freq,

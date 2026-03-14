@@ -137,7 +137,9 @@ def comp_dt(u, dx, nu, cfl=1.0):
     return dt
 
 
-def set_up_solver(N, nu, dim, case, dt, seed, ckp_N, kf, forcing_type="ekin_tot"):
+def set_up_solver(
+    N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target=1.0, forcing_type="ekin_tot"
+):
     L = 2 * jnp.pi
     dx = L / N
     len_z = N if dim == 3 else 1
@@ -167,6 +169,12 @@ def set_up_solver(N, nu, dim, case, dt, seed, ckp_N, kf, forcing_type="ekin_tot"
         u = init_u_kolm(N, seed=seed, target_dim=3)
     elif case == "TGV2D":
         u = init_u_tgv2d(N, target_dim=3, rescale=L)
+
+    # rescale initial velocity to match target kinetic energy
+    e_kin_init = 0.5 * jnp.mean(jnp.sum(u * u, axis=0))
+    u *= jnp.sqrt(e_kin_target / (e_kin_init + EPS))
+
+    # transform to spectral space
     u_hat = jnp.fft.rfftn(u, axes=fft_axes).squeeze()  # (3,N,N,N//2+1)
 
     # compute initial kinetic energy as target for rescaling
@@ -281,6 +289,7 @@ def simulate(
     burnin=0,
     dt=0.01,
     u_ref=1.0,
+    e_kin_target=1.0,
     seed=42,
     log_freq=20,
     vis_freq=10**8,
@@ -304,7 +313,8 @@ def simulate(
             dt=0.027 (CFL=1.15); we use dt=0.01 (CFL=0.37).  N=192, Re=1600: computed
             dt=0.0087
         u_ref (float): Reference velocity. Used for plotting and CFL computation.
-        case (str): Simulation case. One of ["TGV", "HIT"].
+        e_kin_target (float): Target kinetic energy for forced HIT case.
+        seed (int): Random seed for initialization.
         log_freq (int): How often to log simulation progress.
         vis_freq (int): How often to generate visualizations.
         ckp_freq (int): How often to save the flow field.
@@ -319,7 +329,7 @@ def simulate(
     """
 
     u, u_hat, xyz_vis, dx, integrate_fn, _, _, e_kin_init, e_inj = set_up_solver(
-        N, nu, dim, case, dt, seed, ckp_N, kf, forcing_type
+        N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target, forcing_type
     )
 
     dst_vis = os.path.join(dst_path, "ckp_vis")
@@ -334,7 +344,8 @@ def simulate(
     if ckp_freq < 10**6:
         write_u(u, 0, dst_ckp, ckp_N)
 
-    hit_eddy_turnover_time = 0.0
+    e_inj_acc = 0.0
+    # e_diss_rate = 0.0
 
     print(
         f"{'#' * 79}\nSimulation with N={N}, nu={nu}, t_final={t_final}, dt={dt}, ",
@@ -352,7 +363,10 @@ def simulate(
         t_sim += time() - t_temp
 
         # sum up injection rate to get eddy turnover time for forced HIT case
-        hit_eddy_turnover_time += e_inj
+        e_inj_acc += e_inj
+
+        # compute dissipation rate for logging
+        # e_diss_rate += comp_dissipation_rate(u_hat, nu)
 
         if i % log_freq == 0:
             e_kin = 0.5 * jnp.mean(jnp.sum(u * u, axis=0))
@@ -371,11 +385,20 @@ def simulate(
             write_u(u, i, dst_ckp, ckp_N)
 
     if case == "HIT" and forcing_type != "none":
-        hit_eddy_turnover_time /= i
+        hit_eddy_turnover_time = e_inj_acc / i
         hit_eddy_turnover_time *= kf**2
         hit_eddy_turnover_time = 1.0 / hit_eddy_turnover_time ** (1 / 3)
-        print(f"Eddy turnover time = {hit_eddy_turnover_time:.3f}")
+        print(f"Eddy turnover time =            {hit_eddy_turnover_time:.3f}")
         print(f"Number of eddy turnover times = {t_final / hit_eddy_turnover_time:.3f}")
+        # print(f"Average energy dissipated =     {e_diss_rate / tstep:.3f}")
+        print(f"Average energy injected =       {e_inj_acc / i:.3f}")
+
+        kmax = jnp.sqrt(2) * N / 3
+        kolm_scale = (nu**3 / (e_inj_acc / i)) ** (0.25)
+        print(f"kmax*eta =                      {kmax*kolm_scale:.3f}")
+
+        Re_lambda = jnp.sqrt(20 * e_kin**2 / (3 * nu * e_inj_acc / i))
+        print(f"Re_lambda =                     {Re_lambda:.3f}")
 
     t_tot = time() - t0
     print(f"t_tot = {t_tot:.3f}, t_sim = {t_sim:.3f}")
