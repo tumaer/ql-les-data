@@ -15,10 +15,10 @@ sim:
   vis_freq: 100
   ckp_freq: 1
   ckp_N: 32
-  dst_path: "results_tgv2d/"
+  dst_path: "results/tgv2d/"
 
 int:
-  dst_path: "results_tgv2d/"
+  dst_path: "results/tgv2d/"
   state_0_path: "data_relaxed/tgv_2_0.03125_42.h5"
   splits: 8
   relax: True

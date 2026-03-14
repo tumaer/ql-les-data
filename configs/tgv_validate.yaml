@@ -15,4 +15,4 @@ sim:
   vis_freq: 5
   ckp_freq: 5
   ckp_N: 32
-  dst_path: "results_tgv_validate/"
+  dst_path: "results/tgv_validate/"

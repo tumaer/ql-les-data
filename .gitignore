@@ -9,4 +9,4 @@ __pycache__/
 *.pkl
 *.out
 .ruff-cache
-*jobs*/
+*slogs*/

@@ -37,6 +37,7 @@ def single_h5_files_to_h5_dataset(args):
     # list only directories in a root with files and directories
     dirs = os.listdir(args.src_dir)
     dirs = [d for d in dirs if os.path.isdir(os.path.join(args.src_dir, d))]
+    dirs = [d for d in dirs if d.startswith("traj_")]  # only traj directories
     # order by seed value
     dirs = sorted(dirs, key=lambda x: int(x.split("_")[-1]))
 
