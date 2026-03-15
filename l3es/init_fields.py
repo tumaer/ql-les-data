@@ -31,6 +31,82 @@ def init_u_tgv2d(Nx, target_dim=2, rescale=1.0):
 
 
 def init_u_hit(N, seed=42):
+    """Vectorized version of `init_u_hit_slow`."""
+    np.random.seed(seed)
+
+    # 1. Precompute Spectrum (E_k)
+    nmax = round(np.sqrt(3 * N**2) / 2)
+    E_k = np.zeros(nmax + 1) + EPS
+    k_arr = np.arange(1, nmax + 1)
+    E_k[1:] = k_arr ** (-5 / 3) / (4 * np.pi * k_arr**2)
+
+    # 2. Setup grid matching the original loop execution order
+    k1_loop = np.arange(N // 2 + 1)
+    k2_loop = np.arange(-N // 2, N // 2)
+    k3_loop = np.arange(-N // 2, N // 2)
+
+    K1, K2, K3 = np.meshgrid(k1_loop, k2_loop, k3_loop, indexing="ij")
+
+    WK = np.sqrt(K1**2 + K2**2 + K3**2)
+    WK12 = np.sqrt(K1**2 + K2**2)
+    NK = np.clip(np.round(WK).astype(int), 0, nmax)
+    AMP = np.sqrt(E_k[NK])
+
+    # 3. Vectorized RNG matching exact original sequence
+    phis = 2 * np.pi * np.random.random((N // 2 + 1, N, N, 3))
+    phi1, phi2, phi3 = phis[..., 0], phis[..., 1], phis[..., 2]
+
+    # Complex amplitudes
+    ai = AMP * np.exp(1j * phi1) * np.cos(phi3)
+    bi = AMP * np.exp(1j * phi2) * np.sin(phi3)
+
+    # 4. Compute components safely (avoiding zero division warnings)
+    WK_safe = np.where(WK == 0, 1.0, WK)
+    WK12_safe = np.where(WK12 == 0, 1.0, WK12)
+
+    u_loop = np.zeros((N // 2 + 1, N, N, 3), dtype=np.complex128)
+
+    # Base velocity field calculation
+    u_loop[..., 0] = (ai * WK * K2 + bi * K1 * K3) / (WK_safe * WK12_safe)
+    u_loop[..., 1] = (bi * K2 * K3 - ai * WK * K1) / (WK_safe * WK12_safe)
+    u_loop[..., 2] = -bi * WK12 / WK_safe
+
+    # Apply conditions: wk12 == 0
+    mask_wk12_zero = WK12 == 0
+    u_loop[..., 0] = np.where(mask_wk12_zero, ai, u_loop[..., 0])
+    u_loop[..., 1] = np.where(mask_wk12_zero, bi, u_loop[..., 1])
+
+    # Apply conditions: wk == 0
+    mask_wk_zero = WK == 0
+    u_loop[..., 0] = np.where(mask_wk_zero, 0.0, u_loop[..., 0])
+    u_loop[..., 1] = np.where(mask_wk_zero, 0.0, u_loop[..., 1])
+    u_loop[..., 2] = np.where(mask_wk_zero, 0.0, u_loop[..., 2])
+
+    # 5. Remap from loop-order to standard FFT spatial mapping (j, k indices)
+    j_idx = (N + k2_loop) % N
+    k_idx = (N + k3_loop) % N
+    j_inv = np.argsort(j_idx)
+    k_inv = np.argsort(k_idx)
+
+    u = u_loop[:, j_inv, :][:, :, k_inv]
+
+    # 6. Enforce conjugate symmetry in a vectorized manner
+    Nf_ = N // 2
+    u[0, -Nf_ + 1 :, -Nf_ + 1 :, :] = np.flip(
+        np.conj(u[0, 1:Nf_, 1:Nf_, :]), axis=(0, 1)
+    )
+    u[0, 1:Nf_, -Nf_ + 1 :, :] = np.flip(
+        np.conj(u[0, -Nf_ + 1 :, 1:Nf_, :]), axis=(0, 1)
+    )
+    u[0, 0, -Nf_ + 1 :, :] = np.flip(np.conj(u[0, 0, 1:Nf_, :]), axis=0)
+    u[0, -Nf_ + 1 :, 0, :] = np.flip(np.conj(u[0, 1:Nf_, 0, :]), axis=0)
+
+    # 7. Transform to real space
+    u = jnp.fft.irfftn(u.transpose(3, 0, 1, 2), axes=(-1, -2, -3), norm="forward")
+    return u
+
+
+def init_u_hit_slow(N, seed=42):
     np.random.seed(seed)
 
     def apply_conjugate_symmetry_2D(A):
