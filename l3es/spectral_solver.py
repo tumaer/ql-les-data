@@ -1,5 +1,6 @@
 """Core spectral DNS solver."""
 
+import csv
 import os
 from time import time
 
@@ -143,13 +144,14 @@ def set_up_solver(
     L = 2 * jnp.pi
     dx = L / N
     len_z = N if dim == 3 else 1
+    len_z_vis = ckp_N if dim == 3 else 1
     fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
 
     # a = jnp.mgrid[:N, :N, :len_z].astype(float) * L / N  # (3,N,N,N)
     xyz = jnp.meshgrid(jnp.arange(N), jnp.arange(N), jnp.arange(len_z), indexing="ij")
     xyz = jnp.array(xyz) * L / N
     x = jnp.arange(ckp_N)
-    xyz_vis = jnp.meshgrid(x, x, jnp.arange(len_z), indexing="ij")
+    xyz_vis = jnp.meshgrid(x, x, jnp.arange(len_z_vis), indexing="ij")
     xyz_vis = jnp.array(xyz_vis) * L / N
     xyz_vis = (xyz_vis.T + jnp.array([0, 0, L - dx])).T if dim == 2 else xyz_vis
     # print(jnp.isclose(xyz,a).all(), a[:,1,0,0], xyz[:,1,0,0])
@@ -334,6 +336,12 @@ def simulate(
 
     dst_vis = os.path.join(dst_path, "ckp_vis")
     dst_ckp = os.path.join(dst_path, "ckp")
+    diagnostics_path = os.path.join(dst_path, "diagnostics.csv")
+
+    with open(diagnostics_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["step", "time", "umax", "ekin", "dt_est", "e_inj"])
+
     if vis_freq < 10**6:
         plot_e_k(u, 0, save_path=dst_vis, dim=dim, ylims=(1e-8, 1e2))
         if dim == 2:
@@ -369,11 +377,18 @@ def simulate(
         # e_diss_rate += comp_dissipation_rate(u_hat, nu)
 
         if i % log_freq == 0:
-            e_kin = 0.5 * jnp.mean(jnp.sum(u * u, axis=0))
+            e_kin = 0.5 * float(jnp.mean(jnp.sum(u * u, axis=0)))
+            umax = float(jnp.abs(u).max())
+            dt_est = float(comp_dt(u, dx, nu))
+            sim_time = float((i + 1) * dt)
+            with open(diagnostics_path, "a", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow([i, sim_time, umax, e_kin, dt_est, float(e_inj)])
             print(
-                f"step {i}, u_max = {abs(u).max():.3f}, E_kin = {e_kin:.3f}, "
-                f"dt_est = {comp_dt(u, dx, nu):.5f}, E_inj = {e_inj:.3f}"
+                f"step {i}, u_max = {umax:.3f}, E_kin = {e_kin:.3f}, "
+                f"dt_est = {dt_est:.5f}, E_inj = {e_inj:.3f}"
             )
+
         if i % vis_freq == 0:
             if dim == 2:
                 u_ckp = spectral_filtering(u[:2].squeeze(), ckp_N)[..., None]
@@ -395,6 +410,7 @@ def simulate(
 
         kmax = jnp.sqrt(2) * N / 3
         kolm_scale = (nu**3 / (e_inj_acc / i)) ** (0.25)
+        print(f"eta=                            {kolm_scale:.3f}")
         print(f"kmax*eta =                      {kmax*kolm_scale:.3f}")
 
         Re_lambda = jnp.sqrt(20 * e_kin**2 / (3 * nu * e_inj_acc / i))
