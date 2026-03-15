@@ -2,10 +2,13 @@
 
 import csv
 import os
+import pickle
 from time import time
 
+import jax
 import jax.numpy as jnp
-from jax import config, jit
+from jax import config
+from jax.experimental import serialize_executable
 
 from l3es.init_fields import (
     init_forcing_mask_hit,
@@ -138,8 +141,44 @@ def comp_dt(u, dx, nu, cfl=1.0):
     return dt
 
 
+def custom_jit_integrate(path_pref, rejit, integrate_fn, u, u_hat):
+    if rejit or not os.path.exists(f"{path_pref}.bin"):  # 100s at 256^3
+        u_shape = jax.ShapeDtypeStruct(u.shape, u.dtype)
+        u_hat_shape = jax.ShapeDtypeStruct(u_hat.shape, u_hat.dtype)
+        lowered = jax.jit(integrate_fn).lower(u_shape, u_hat_shape)
+        integrate_fn = lowered.compile()
+        serialized_bin, in_tree, out_tree = serialize_executable.serialize(integrate_fn)
+        parent_dir = os.path.dirname(path_pref)
+        os.makedirs(parent_dir, exist_ok=True)
+        with open(f"{path_pref}.bin", "wb") as f:
+            f.write(serialized_bin)
+        with open(f"{path_pref}_tree.pkl", "wb") as f:
+            pickle.dump((in_tree, out_tree), f)
+        print("### Rejitted.")
+    else:  # Load from file; 4s at 256^3
+        with open(f"{path_pref}.bin", "rb") as f:
+            serialized_bin = f.read()
+        with open(f"{path_pref}_tree.pkl", "rb") as f:
+            in_tree, out_tree = pickle.load(f)
+        integrate_fn = serialize_executable.deserialize_and_load(
+            serialized_bin, in_tree, out_tree
+        )
+        print("### Loaded.")
+    return integrate_fn
+
+
 def set_up_solver(
-    N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target=1.0, forcing_type="ekin_tot"
+    N,
+    nu,
+    dim,
+    case,
+    dt,
+    seed,
+    ckp_N,
+    kf,
+    e_kin_target=1.0,
+    forcing_type="ekin_tot",
+    rejit=True,
 ):
     L = 2 * jnp.pi
     dx = L / N
@@ -152,7 +191,7 @@ def set_up_solver(
     xyz = jnp.array(xyz) * L / N
     x = jnp.arange(ckp_N)
     xyz_vis = jnp.meshgrid(x, x, jnp.arange(len_z_vis), indexing="ij")
-    xyz_vis = jnp.array(xyz_vis) * L / N
+    xyz_vis = jnp.array(xyz_vis) * L / ckp_N
     xyz_vis = (xyz_vis.T + jnp.array([0, 0, L - dx])).T if dim == 2 else xyz_vis
     # print(jnp.isclose(xyz,a).all(), a[:,1,0,0], xyz[:,1,0,0])
 
@@ -166,7 +205,7 @@ def set_up_solver(
     if case == "TGV":
         u = init_u_tgv(xyz[0], xyz[1], xyz[2])  # (3,N,N,N)
     elif case == "HIT":
-        u = init_u_hit(N, seed)
+        u = init_u_hit(N, seed)  # 7s at 256^3
     elif case == "Kolm":
         u = init_u_kolm(N, seed=seed, target_dim=3)
     elif case == "TGV2D":
@@ -266,7 +305,12 @@ def set_up_solver(
         forcing_type,
         fft_axes,
     )
-    integrate_fn = jit(integrate_fn)
+    device_type = "gpu" if jax.lib.xla_bridge.get_backend().platform == "gpu" else "cpu"
+    if forcing_type != "none":
+        path_pref = f".cache/spectral_{device_type}_{N}_{dim}_{kf}_{forcing_type}"
+    else:
+        path_pref = f".cache/spectral_{device_type}_{N}_{dim}"
+    integrate_fn = custom_jit_integrate(path_pref, rejit, integrate_fn, u, u_hat)
     u, u_hat, e_inj = integrate_fn(u, u_hat)
 
     # import matplotlib.pyplot as plt
@@ -277,7 +321,7 @@ def set_up_solver(
     # plt.savefig("orientation_check.png")
 
     u.block_until_ready()
-    print("Compilation time:", time() - t0)
+    print(f"Compilation time {time() - t0:.3f}")
 
     return u, u_hat, xyz_vis, dx, integrate_fn, L, fft_axes, e_kin_init, e_inj
 
@@ -291,15 +335,16 @@ def simulate(
     burnin=0,
     dt=0.01,
     u_ref=1.0,
-    e_kin_target=1.0,
     seed=42,
     log_freq=20,
     vis_freq=10**8,
     ckp_freq=1,
     ckp_N=32,
-    kf=3,
     dst_path=None,
+    kf=3,
     forcing_type=None,
+    e_kin_target=1.0,
+    rejit=True,
 ):
     """Simulator wrapper.
 
@@ -327,11 +372,12 @@ def simulate(
             ekin_tot: rescale to keep total kinetic energy constant
             ekin_low: rescale only to keep low wavenumber kinetic energy constant.
             none: no forcing.
+        rejit (bool): Whether to recompile the solver.
         dst_path (str): Where to write results. (Destination path)
     """
 
-    u, u_hat, xyz_vis, dx, integrate_fn, _, _, e_kin_init, e_inj = set_up_solver(
-        N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target, forcing_type
+    u, u_hat, xyz_vis, dx, integrate_fn, L, _, e_kin_init, e_inj = set_up_solver(
+        N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target, forcing_type, rejit
     )
 
     dst_vis = os.path.join(dst_path, "ckp_vis")
@@ -348,7 +394,7 @@ def simulate(
             u_ckp = spectral_filtering(u[:2].squeeze(), ckp_N)[..., None]
         else:
             u_ckp = spectral_filtering(u, ckp_N)
-        plot_views(xyz_vis, u_ckp, dx, 0, save_path=dst_vis, u_ref=u_ref)
+        plot_views(xyz_vis, u_ckp, L / ckp_N, 0, save_path=dst_vis, u_ref=u_ref)
     if ckp_freq < 10**6:
         write_u(u, 0, dst_ckp, ckp_N)
 
@@ -365,6 +411,10 @@ def simulate(
     for i in range(tstep_max):
         if i == burnin:
             write_u(u, i, dst_path, N, suffix="_burnin")
+        if i == burnin and case == "HIT":  # switch to a compiled solver without forcing
+            _, _, _, _, integrate_fn, _, _, _, _ = set_up_solver(
+                N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target, "none", rejit
+            )
         t_temp = time()
         u, u_hat, e_inj = integrate_fn(u, u_hat)
         u.block_until_ready()
@@ -394,7 +444,7 @@ def simulate(
                 u_ckp = spectral_filtering(u[:2].squeeze(), ckp_N)[..., None]
             else:
                 u_ckp = spectral_filtering(u, ckp_N)
-            plot_views(xyz_vis, u_ckp, dx, i, save_path=dst_vis, u_ref=u_ref)
+            plot_views(xyz_vis, u_ckp, L / ckp_N, i, save_path=dst_vis, u_ref=u_ref)
             plot_e_k(u, i, save_path=dst_vis, dim=dim, ylims=(1e-8, 1e2))
         if i % ckp_freq == 0:
             write_u(u, i, dst_ckp, ckp_N)

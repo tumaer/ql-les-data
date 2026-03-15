@@ -39,7 +39,6 @@ if __name__ == "__main__":
             burnin=cfg.sim.get("burnin", 0),
             dt=cfg.sim.dt,
             u_ref=cfg.sim.u_ref,
-            e_kin_target=cfg.sim.e_kin_target,
             seed=cfg.seed,
             log_freq=cfg.sim.log_freq,
             vis_freq=cfg.sim.vis_freq,
@@ -48,6 +47,8 @@ if __name__ == "__main__":
             dst_path=cfg.sim.dst_path,
             kf=cfg.sim.get("kf", None),
             forcing_type=cfg.sim.get("forcing_type", "none"),
+            e_kin_target=cfg.sim.e_kin_target,
+            rejit=cfg.get("rejit", True),
         )
     elif cfg.mode == "integrate":
         os.makedirs(cfg.int.dst_path, exist_ok=True)
@@ -90,6 +91,8 @@ if __name__ == "__main__":
             debug=cfg.com.get("debug", False),
             kf=cfg.sim.get("kf", None),
             forcing_type=cfg.sim.get("forcing_type", "none"),
+            e_kin_target=cfg.sim.e_kin_target,
+            rejit=cfg.get("rejit", True),
         )
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")

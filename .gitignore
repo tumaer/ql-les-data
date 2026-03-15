@@ -10,3 +10,4 @@ __pycache__/
 *.out
 .ruff-cache
 *slogs*/
+.cache/

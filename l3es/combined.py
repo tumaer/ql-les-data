@@ -40,6 +40,8 @@ def combined(
     debug=False,
     kf=3,
     forcing_type=None,
+    e_kin_target=1.0,
+    rejit=True,
 ):
     """Integrate SPH particles along prescribed velocity field.
 
@@ -59,7 +61,7 @@ def combined(
     os.makedirs(int_path, exist_ok=True)
 
     u, u_hat, xyz_vis, dx_dns, integrate_fn, L, fft_axes, ek_ini, e_inj = set_up_solver(
-        N, nu, dim, case, dt, seed, ckp_N, kf, forcing_type
+        N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target, forcing_type, rejit
     )
     hit_eddy_turnover_time = 0.0
     print(
@@ -80,6 +82,10 @@ def combined(
     for i in range(tstep_max):
         if i == burnin:
             write_u(u, i, dst_path, N, suffix="_burnin")
+        if i == burnin and case == "HIT":  # switch to a compiled solver without forcing
+            _, _, _, _, integrate_fn, _, _, _, _ = set_up_solver(
+                N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target, "none", rejit
+            )
         t_temp = time()
         u, u_hat, e_inj = integrate_fn(u, u_hat)
         u.block_until_ready()
@@ -104,7 +110,7 @@ def combined(
             plot_views(
                 xyz_vis,
                 u_ckp,
-                dx_dns,
+                L / ckp_N,
                 i,
                 save_path=vis_path,
                 u_ref=u_ref,
