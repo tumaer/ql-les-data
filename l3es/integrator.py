@@ -1,6 +1,7 @@
 import os
 from time import time
 
+import finufft
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -25,14 +26,40 @@ def shift_fn(r, dr, box_size=2 * np.pi):
     return (r + dr) % box_size
 
 
-def spectral_interpolator_wrapper(N, fft_axes=(1, 2, 3), splits=128):
+def spectral_interpolator_wrapper(N, fft_axes=(1, 2, 3), splits=128, backend="nufft"):
     k = np.fft.fftshift(np.fft.fftfreq(N, 1.0 / N))
     k_tuple = (k, k, k) if len(fft_axes) == 3 else (k, k)
     k_field = np.array(np.meshgrid(*k_tuple, indexing="ij"), dtype=int)  # (3, N, N, N)
 
     assert splits & (splits - 1) == 0, "Splits must be a power of 2"
+    assert backend in ["jax", "finufft"]
 
-    def interpolate(u, r):
+    def interpolate_finufft(u, r):
+        # u.shape = (3, N, N, N) or (2, N, N), r.shape = (num_particles, dim)
+        u_hat = np.fft.fftshift(
+            np.fft.fftn(np.asarray(u), axes=fft_axes), axes=fft_axes
+        )
+
+        x = np.asarray(r[:, 0], dtype=np.float64)
+        y = np.asarray(r[:, 1], dtype=np.float64)
+        if len(fft_axes) == 3:
+            z = np.asarray(r[:, 2], dtype=np.float64)
+
+        # finufft type-2 uses e^{+i k x} with centered mode ordering by default
+        # (k = -N/2, ..., N/2-1), matching fftshift'ed coefficients.
+        u_r = np.zeros((r.shape[0], u_hat.shape[0]), dtype=np.float64)
+        for c in range(u_hat.shape[0]):
+            coeff = np.asarray(u_hat[c], dtype=np.complex128)
+            if len(fft_axes) == 3:
+                vals = finufft.nufft3d2(x, y, z, coeff)
+                u_r[:, c] = np.real(vals) / (N**3)
+            else:
+                vals = finufft.nufft2d2(x, y, coeff)
+                u_r[:, c] = np.real(vals) / (N**2)
+
+        return jnp.asarray(u_r)
+
+    def interpolate_dft(u, r):
         # u.shape = (3, N, N, N) or (2, N, N), r.shape - (N^3, 3)
 
         u_hat = jnp.fft.fftn(u, axes=fft_axes)  # (3, N, N, N)
@@ -63,7 +90,7 @@ def spectral_interpolator_wrapper(N, fft_axes=(1, 2, 3), splits=128):
 
         return u_r
 
-    return interpolate
+    return interpolate_dft if backend == "dft" else interpolate_finufft
 
 
 # step = 1
@@ -83,7 +110,7 @@ def my_imshow(ax, u, vmin, vmax):
     ax.set_title(f"ux (min={u.min():.2f}, max={u.max():.2f})")
 
 
-def set_up_integrator(state_0_path, dim, N, splits, u_ref):
+def set_up_integrator(state_0_path, dim, N, splits, u_ref, interp_backend):
     L = 2 * np.pi
     fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
 
@@ -96,7 +123,9 @@ def set_up_integrator(state_0_path, dim, N, splits, u_ref):
             r = pos_init_cartesian_2d(L * np.ones(2), L / N)
 
     comp_rho = rho_computer(N, dim=dim, L=L)
-    interpolator = spectral_interpolator_wrapper(N, fft_axes, splits=splits)
+    interpolator = spectral_interpolator_wrapper(
+        N, fft_axes, splits=splits, backend=interp_backend
+    )
     relax_fn, sph_fn = relax_wrapper(N, dim, L, is_physical=True, u_ref=u_ref)
 
     return r, comp_rho, interpolator, relax_fn, sph_fn, L, fft_axes
@@ -113,6 +142,7 @@ def integrate(
     u_ref=4.0,
     relax=False,
     vis_freq=100,
+    interp_backend="dft",
 ):
     """Integrate SPH particles along prescribed velocity field.
 
@@ -135,7 +165,7 @@ def integrate(
     os.makedirs(int_path, exist_ok=True)
 
     r, comp_rho, interpolator, relax_fn, _, L, fft_axes = set_up_integrator(
-        state_0_path, dim, N, splits, u_ref
+        state_0_path, dim, N, splits, u_ref, interp_backend
     )
     all_accs = {}
     # for factor in [5, 7, 10, 15, 20, 25]:

@@ -66,6 +66,7 @@ if __name__ == "__main__":
             u_ref=cfg.sim.u_ref,
             relax=cfg.int.relax,
             vis_freq=cfg.int.vis_freq,
+            interp_backend=cfg.int.get("interp_backend", "dft"),
         )
     elif cfg.mode == "combined":
         os.makedirs(cfg.com.dst_path, exist_ok=True)
@@ -93,6 +94,7 @@ if __name__ == "__main__":
             forcing_type=cfg.sim.get("forcing_type", "none"),
             e_kin_target=cfg.sim.e_kin_target,
             rejit=cfg.get("rejit", True),
+            interp_backend=cfg.com.get("interp_backend", "dft"),
         )
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")

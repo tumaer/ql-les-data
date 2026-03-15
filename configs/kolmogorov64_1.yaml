@@ -7,7 +7,7 @@ gpu: 0
 float64: True
 xla_mem_fraction: 0.5
 seed: 42
-rejit: True
+rejit: False
 
 sim:
   case: "Kolm"
@@ -40,3 +40,4 @@ com:
   vis_freq: 1000
   ckp_freq: 1
   dst_path: "results/kolm64_1/"
+  interp_backend: "dft"

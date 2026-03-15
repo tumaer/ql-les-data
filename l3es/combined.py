@@ -42,6 +42,7 @@ def combined(
     forcing_type=None,
     e_kin_target=1.0,
     rejit=True,
+    interp_backend="dft",
 ):
     """Integrate SPH particles along prescribed velocity field.
 
@@ -70,7 +71,7 @@ def combined(
     )
 
     r, comp_rho, interpolator, relax_fn, sph_fn, _, _ = set_up_integrator(
-        state_0_path, dim, ckp_N, splits, u_ref
+        state_0_path, dim, ckp_N, splits, u_ref, interp_backend
     )
     displacement_fn, _ = space.periodic(side=L * np.ones(dim))
     displacement_fn_sets = vmap(displacement_fn)

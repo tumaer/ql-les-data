@@ -15,6 +15,7 @@ pillow = "^10.4.0"
 jax-cfd = "^0.2.1"
 xarray = "^2024.7.0"
 seaborn = "^0.13.2"
+finufft = "^2.5.0"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = ">=3.3.1"
