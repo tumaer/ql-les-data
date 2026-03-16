@@ -1,0 +1,37 @@
+mode: str # [simulate, combined], combined = simulate + integrate
+gpu: int # "-1" for CPU, 0...7 for GPU
+float64: bool # whether to use float64, or the JAX default float32
+seed: int # random seed for reproducibility
+rejit: bool # whether to enforce jit on spectral solver, or use cached binary
+xla_mem_fraction: Optional[float] # [0, 1]; default=0.8; % GPU memory to pre-allocate
+
+sim:
+  case: str # [HIT, Kolm, TGV2D, TGV3D]
+  N: int # number of grid points in each dimension (for spectral solver)
+  dim: int # number of spatial dimensions. 2D/3D supported.
+  nu: float # kinematic viscosity
+  t_final: float # final (dimensionless) time
+  t_burnin: float # at burn-in time, stop external forcing, and activate "ckp_freq"
+  dt: float # integration time step
+  u_ref: float # reference velocity for visualization and relaxation
+  ckp_N: int # number of grid points in each dimension for checkpoints and interpolation
+  # HIT forcing
+  forcing_type: Optional[str] # [ekin_tot, none]
+  e_kin_target: Optional[float] # target kinetic energy for ekin_tot forcing
+  kf: Optional[int] # forcing wavenumber for HIT
+  # IO
+  log_freq: int # frequency of logging (printing to CLI and writing to CSV file)
+  vis_freq: int # frequency of visualization (plotting views and spectra)
+  ckp_freq: int # frequency of checkpointing (saving simulation frames to file)
+  dst_path: str # path to save results
+
+com:
+  state_0_path: str # path to the initial positions file (h5 format); Run JAX-SPH first!
+  interp_backend: str # interpolation backend for combined mode [dft, nufft]
+  relax_dt_factor: float # factor applied to the relaxation time step. "0" = disabled
+  dft_splits: Optional[int] # number of splits used by the DFT-based interpolation
+  # IO
+  log_freq: int
+  vis_freq: int
+  ckp_freq: int
+  dst_path: str

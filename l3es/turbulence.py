@@ -368,7 +368,7 @@ if __name__ == "__main__":
 
         # visualize
         plot_e_k(u_grid, step, save_path=vis_path, dim=dim)
-        plot_views(r_grid, u_grid, L / N, step, save_path=vis_path, u_ref=u_ref)
+        plot_views(r_grid, u_grid, L / N, step, "vort", save_path=vis_path, u_ref=u_ref)
         print("Done.")
 
         # nohup python main.py config=configs/hit_192.yaml mode=integrate \

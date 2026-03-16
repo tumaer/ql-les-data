@@ -1,0 +1,37 @@
+mode: combined
+gpu: 0
+float64: True
+seed: 42
+rejit: False
+
+sim:
+  case: "HIT"
+  N: 256
+  dim: 3
+  nu: 0.002
+  t_final: 15.0
+  t_burnin: 10.0 # 10 burnin, then 5 main run
+  # DNS: dt=CFL*dx/u_ref = 0.5*2pi/256/4 = 0.0031
+  # SPH: dt=CFL*dx/11u_ref = 0.5*2pi/32/44 = 0.0022 -> 0.002
+  dt: 0.002
+  u_ref: 4.0
+  ckp_N: 32
+  # HIT forcing
+  forcing_type: "ekin_tot"
+  e_kin_target: 1.25
+  kf: 3
+  # IO
+  log_freq: 20
+  vis_freq: 500
+  ckp_freq: 1
+  dst_path: "results/hit32_1/"
+
+com:
+  state_0_path: "dataset_hit/data_relaxed/rlx_3_0.1963495408_0.h5"
+  interp_backend: "nufft"
+  relax_dt_factor: 2
+  # IO
+  log_freq: 20
+  vis_freq: 500
+  ckp_freq: 1
+  dst_path: "results/hit32_1_com/"

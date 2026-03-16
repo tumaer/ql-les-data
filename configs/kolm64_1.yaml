@@ -1,11 +1,10 @@
 # Every 1 step is recorded
 # for comparison with JAX-CFD:
-# python main.py config=configs/kolmogorov64_1.yaml sim.t_final=22 sim.ckp_freq=70 \
+# python main.py config=configs/kolm64_1.yaml sim.t_final=22 sim.ckp_freq=70 \
 #     sim.dst_path=results/kolm64_1 seed=1
-mode: simulate  # [simulate, integrate, combined]
+mode: combined
 gpu: 0
 float64: True
-xla_mem_fraction: 0.5
 seed: 42
 rejit: False
 
@@ -15,29 +14,26 @@ sim:
   dim: 2
   nu: 0.001  # from JAX-CFD
   t_final: 18.5  # first 4.5 will be removed
-  burnin: 4500  # burnin steps - record full HD state after that many steps
+  t_burnin: 4.5  # burnin time - record full HD state after that many steps
   # dt_SPH: h/11U = 2pi/64/(11*6) = 0.00149 => 0.001 at CFL=0.66; 
   # dt_JAX-CFD(nu=0.001, 256^2, v_max=7, CFL=0.5) leads to dt=0.00175
   # dt_JAX-CFD: h/U = 2pi/512/6 = 0.00205 => 0.001 at CFL=0.5
   dt: 0.001
   u_ref: 6.0
   ckp_N: 64
+  # IO
   log_freq: 100
   vis_freq: 1000
   ckp_freq: 1
-  dst_path: "results/kolm64_1/"
-
-int:
-  state_0_path: "data_relaxed/rlx_2_0.0981747704_0.h5"
-  splits: 8
-  relax: True
-  vis_freq: 100
   dst_path: "results/kolm64_1/"
 
 com:
-  burnin: 4500
+  state_0_path: "dataset_kolm/data_relaxed/rlx_2_0.0981747704_0.h5"
+  interp_backend: "dft"
+  relax_dt_factor: 1.4142135624 # sqrt(2)
+  dft_splits: 2
+  # IO
   log_freq: 100
   vis_freq: 1000
   ckp_freq: 1
-  dst_path: "results/kolm64_1/"
-  interp_backend: "dft"
+  dst_path: "results/kolm64_1_com/"

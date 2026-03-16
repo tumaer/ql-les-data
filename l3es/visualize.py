@@ -21,17 +21,12 @@ config.update("jax_enable_x64", True)
 plt.rcParams.update({"font.size": 14})
 
 
-def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""):
+def plot_views(xyz, u, dx, step, field2, save_path=None, u_ref=4, suffix=""):
     """Scatter plot of the flow field
 
     Args:
-    Type 1:
         xyz (np.ndarray): Grid of shape (3, N, N, N) or (3, N, N, 1).
-        u (np.ndarray): Flow field with shape (3, N, N, N) or (3, N, N, 1).
-    Type 2:
-        xyz (np.ndarray): Grid of shape (3, N) or (2, N).
-        u (np.ndarray): Flow field with shape (3, N) or (2, N).
-
+        u (np.ndarray): Flow field with shape (3, N, N, N) or (2, N, N, 1).
         dx (float): Grid spacing.
         step (int): Current time step.
         field2 [key, value]: Additional field to plot.
@@ -41,54 +36,40 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
     x, y, z = xyz
 
     # x axis - bottom left, y axis - center, z axis - vertical
-    assert xyz.shape == u.shape
-    is_type = 2 if xyz.ndim == 2 else 1
-    dim = 2 if (u.shape[-1] == 1 or u.shape[0] == 2) else 3
-    Nx = len(x) if is_type == 1 else int(len(x) ** (1 / dim))
+    dim = 2 if u.shape[-1] == 1 else 3
+    Nx = len(x)
+    vmins = [-u_ref, None, 0]
+    vmaxs = [u_ref, None, u_ref]
+    field2_property = field2 if isinstance(field2, str) else field2[0]
     if dim == 3:
         projection = "3d"
         mask = (x > 2 * np.pi - 1.4 * dx) | (y < 1.4 * dx) | (z > 2 * np.pi - 1.4 * dx)
         xyz_ = (x[mask], y[mask], z[mask])
 
-        if field2 is None and is_type == 1:
-            is_vorticity = True
-            if is_vorticity:
-                field2 = ["vort", comp_vorticity_3d(u, dx)[0]]
-            else:
-                field2 = ["div", comp_divergence_3d(u, dx, version=2)[0]]
-            vmins = [-u_ref, None, 0]
-            vmaxs = [u_ref, None, u_ref]
-        elif field2 is None and is_type == 2:
-            raise NotImplementedError("With type 2, field2 must be specified.")
-        else:
+        if field2_property == "vort":
+            field2 = ["vort", comp_vorticity_3d(u, dx)[0]]
+        elif field2_property == "div":
+            field2 = ["div", comp_divergence_3d(u, dx, version=2)[0]]
+        elif field2_property == "rho":
             vmins = [-u_ref, 0.95, 0]
             vmaxs = [u_ref, 1.05, u_ref]
-
         fields = [u[0], field2[1], np.linalg.norm(u, axis=0)]
         labels = ["ux", field2[0], "|u|"]
-
     else:
         projection = None
         mask = np.ones_like(x[..., 0], dtype=bool)
         xyz_ = (x, y)
         u = u.squeeze()
 
-        if field2 is None and is_type == 1:
-            is_vorticity = True
-            if is_vorticity:
-                field2 = ["vort", comp_vorticity(u, dx)]
-            else:
-                field2 = ["div", comp_divergence(u, dx, version=2)]
-            vmins = [-u_ref, None, 0]
-            vmaxs = [u_ref, None, u_ref]
-        elif field2 is None and is_type == 2:
-            raise NotImplementedError("With type 2, field2 must be specified.")
-        else:
+        if field2_property == "vort":
+            field2 = ["vort", comp_vorticity(u, dx)]
+        elif field2_property == "div":
+            field2 = ["div", comp_divergence(u, dx, version=2)]
+        elif field2_property == "rho":
             vmins = [-u_ref, 0.95, 0]
             vmaxs = [u_ref, 1.05, u_ref]
-
-        labels = ["ux", field2[0], "|u|"]
         fields = [u[0], field2[1], np.linalg.norm(u, axis=0)]
+        labels = ["ux", field2[0], "|u|"]
 
     size = 36 * (32 / Nx) ** 2
 
