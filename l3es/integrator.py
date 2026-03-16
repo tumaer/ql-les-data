@@ -27,12 +27,14 @@ def shift_fn(r, dr, box_size=2 * np.pi):
 
 
 def spectral_interpolator_wrapper(N, fft_axes=(1, 2, 3), splits=128, backend="nufft"):
+    is_3d = len(fft_axes) == 3
     k = np.fft.fftshift(np.fft.fftfreq(N, 1.0 / N))
-    k_tuple = (k, k, k) if len(fft_axes) == 3 else (k, k)
+    k_tuple = (k, k, k) if is_3d else (k, k)
     k_field = np.array(np.meshgrid(*k_tuple, indexing="ij"), dtype=int)  # (3, N, N, N)
+    norm = N ** len(fft_axes)
 
     assert splits & (splits - 1) == 0, "Splits must be a power of 2"
-    assert backend in ["jax", "finufft"]
+    assert backend in ["dft", "nufft"]
 
     def interpolate_finufft(u, r):
         # u.shape = (3, N, N, N) or (2, N, N), r.shape = (num_particles, dim)
@@ -40,22 +42,23 @@ def spectral_interpolator_wrapper(N, fft_axes=(1, 2, 3), splits=128, backend="nu
             np.fft.fftn(np.asarray(u), axes=fft_axes), axes=fft_axes
         )
 
-        x = np.asarray(r[:, 0], dtype=np.float64)
-        y = np.asarray(r[:, 1], dtype=np.float64)
-        if len(fft_axes) == 3:
-            z = np.asarray(r[:, 2], dtype=np.float64)
+        # 1. Make the entire batched coefficient array contiguous ONCE
+        # FINUFFT expects shape (n_trans, N, N, N) for multi-transforms
+        coeff = np.ascontiguousarray(u_hat, dtype=np.complex128)
 
-        # finufft type-2 uses e^{+i k x} with centered mode ordering by default
-        # (k = -N/2, ..., N/2-1), matching fftshift'ed coefficients.
-        u_r = np.zeros((r.shape[0], u_hat.shape[0]), dtype=np.float64)
-        for c in range(u_hat.shape[0]):
-            coeff = np.asarray(u_hat[c], dtype=np.complex128)
-            if len(fft_axes) == 3:
-                vals = finufft.nufft3d2(x, y, z, coeff)
-                u_r[:, c] = np.real(vals) / (N**3)
-            else:
-                vals = finufft.nufft2d2(x, y, coeff)
-                u_r[:, c] = np.real(vals) / (N**2)
+        # Extract and format coordinates
+        x = np.ascontiguousarray(r[:, 0], dtype=np.float64)
+        y = np.ascontiguousarray(r[:, 1], dtype=np.float64)
+        if is_3d:
+            z = np.ascontiguousarray(r[:, 2], dtype=np.float64)
+            # 2. Vectorized call: passing the (3, N, N, N) coeff array directly
+            # Returns vals of shape (3, num_particles)
+            vals = finufft.nufft3d2(x, y, z, coeff, isign=1)
+        else:
+            vals = finufft.nufft2d2(x, y, coeff, isign=1)
+
+        # 3. Transpose the result to match (num_particles, channels) and normalize
+        u_r = np.real(vals).T / norm
 
         return jnp.asarray(u_r)
 

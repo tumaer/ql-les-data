@@ -430,7 +430,7 @@ def simulate(
             e_kin = 0.5 * float(jnp.mean(jnp.sum(u * u, axis=0)))
             umax = float(jnp.abs(u).max())
             dt_est = float(comp_dt(u, dx, nu))
-            sim_time = float((i + 1) * dt)
+            sim_time = float(i * dt)
             with open(diagnostics_path, "a", newline="") as file:
                 writer = csv.writer(file)
                 writer.writerow([i, sim_time, umax, e_kin, dt_est, float(e_inj)])

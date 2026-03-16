@@ -1,3 +1,4 @@
+import csv
 import os
 from time import time
 
@@ -60,6 +61,11 @@ def combined(
     vis_path = os.path.join(dst_path, "com_vis")
     int_path = os.path.join(dst_path, "com")
     os.makedirs(int_path, exist_ok=True)
+    diagnostics_path = os.path.join(dst_path, "diagnostics.csv")
+
+    with open(diagnostics_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["step", "time", "umax", "ekin", "dt_est", "e_inj", "rho_max"])
 
     u, u_hat, xyz_vis, dx_dns, integrate_fn, L, fft_axes, ek_ini, e_inj = set_up_solver(
         N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target, forcing_type, rejit
@@ -95,14 +101,6 @@ def combined(
         # sum up injection rate to get eddy turnover time for forced HIT case
         hit_eddy_turnover_time += e_inj
 
-        if i % log_freq == 0:
-            e_kin = jnp.mean(jnp.sum(u * u, axis=0))
-            print(
-                f"Step {i}/{tstep_max}, u_max = {abs(u).max():.3f}, "
-                f"E_kin = {e_kin:.3f}, dt_est = {comp_dt(u, dx_dns, nu):.5f}, ",
-                f"E_inj = {e_inj:.3f}",
-                end="" if log_freq >= ckp_freq else "\n",
-            )
         if i % vis_freq == 0:  # grid field
             if dim == 2:
                 u_ckp = spectral_filtering(u[:2].squeeze(), ckp_N)[..., None]
@@ -197,8 +195,6 @@ def combined(
                     r_temp = shift_fn(r_temp, (dt_factor * dt) ** 2 * a_temp)
                     if debug:
                         print(f"{a_temp.max():.3f}, ", end="")
-
-                    if debug:
                         a_r_s.append(a_temp * dt)
                     a_r += a_temp * dt_factor**2
                 if debug:
@@ -246,19 +242,40 @@ def combined(
             u_r.block_until_ready()
         t_int += time() - t_temp
 
+        rho, rho_max = None, None
+        if i % log_freq == 0 or i % ckp_freq == 0 or i % vis_freq == 0:
+            rho = comp_rho(r)
+            rho_max = float(rho.max())
+
+        if i % log_freq == 0:
+            e_kin = 0.5 * float(jnp.mean(jnp.sum(u * u, axis=0)))
+            umax = float(abs(u).max())
+            dt_est = float(comp_dt(u, dx_dns, nu))
+            sim_time = float(i * dt)
+            with open(diagnostics_path, "a", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow(
+                    [i, sim_time, umax, e_kin, dt_est, float(e_inj), rho_max]
+                )
+            print(
+                f"Step {i}/{tstep_max}, u_max = {umax:.3f}, "
+                f"E_kin = {e_kin:.3f}, dt_est = {dt_est:.5f}, "
+                f"E_inj = {float(e_inj):.3f}, rho_max = {rho_max:.3f}"
+            )
+
         if i % ckp_freq == 0:
             if not debug:
                 write_h5(
                     {"r": r, "u": u_r_0}, os.path.join(int_path, f"step_{i:05d}.h5")
                 )
-                print(f"Step {i}/{tstep_max}, rho_max={comp_rho(r).max():.3f}.")
+                print(f"Step {i}/{tstep_max}, rho_max={rho_max:.3f}.")
             else:
                 out_dict = {
                     "r": r,
                     "u_r": u_r,
                     "u_r_0": u_r_0,
                     "a_r_dt": a_r * dt,
-                    "rho": comp_rho(r),
+                    "rho": rho,
                 }
                 for ii, temprary_a in enumerate(a_r_s):
                     out_dict[f"a_r_{ii}_dt"] = temprary_a
@@ -266,12 +283,9 @@ def combined(
                 print(f"Step {i}/{tstep_max}, rho_max={out_dict['rho'].max():.3f}.")
 
         if i % vis_freq == 0:  # particle field
-            r_vis = (r.T).reshape(*u_lres.shape)
-            u_vis = (u_r_0.T).reshape(*u_lres.shape)
-            if dim == 2:
-                r_vis = np.vstack([r_vis, np.zeros_like(r_vis[:1])])[:, :, :, None]
-                u_vis = np.vstack([u_vis, np.zeros_like(u_vis[:1])])[:, :, :, None]
-            rho = comp_rho(r).reshape(*u_lres.shape[1:])
+            r_vis = (r.T - 0.5 * L / ckp_N) % L  # .reshape(*u_lres.shape)
+            u_vis = u_r_0.T  # .reshape(*u_lres.shape)
+
             print("Plotting to ", vis_path)
             plot_views(
                 r_vis,
@@ -283,7 +297,6 @@ def combined(
                 u_ref=u_ref,
                 suffix="_sph",
             )
-            # TODO: shift r by dx/2?
             is_dft_to_grid = False  # MLS works better!
             if is_dft_to_grid:
                 u_grid = ur_to_u_dft_wrapper(ckp_N, L, dim, fft_axes)(r, u_r_0)
@@ -300,11 +313,21 @@ def combined(
         r = shift_fn(r, dt * u_r)
 
     if case == "HIT" and forcing_type != "none":
-        hit_eddy_turnover_time /= i
-        hit_eddy_turnover_time *= kf**2
+        avg_e_inj = hit_eddy_turnover_time / tstep_max
+        hit_eddy_turnover_time = avg_e_inj * kf**2
         hit_eddy_turnover_time = 1.0 / hit_eddy_turnover_time ** (1 / 3)
-        print(f"Eddy turnover time = {hit_eddy_turnover_time:.3f}")
+        print(f"Eddy turnover time =            {hit_eddy_turnover_time:.3f}")
         print(f"Number of eddy turnover times = {t_final / hit_eddy_turnover_time:.3f}")
+        print(f"Average energy injected =       {avg_e_inj:.3f}")
+
+        kmax = jnp.sqrt(2) * N / 3
+        kolm_scale = (nu**3 / avg_e_inj) ** (0.25)
+        print(f"eta=                            {kolm_scale:.3f}")
+        print(f"kmax*eta =                      {kmax*kolm_scale:.3f}")
+
+        e_kin = 0.5 * jnp.mean(jnp.sum(u * u, axis=0))
+        Re_lambda = jnp.sqrt(20 * e_kin**2 / (3 * nu * avg_e_inj))
+        print(f"Re_lambda =                     {Re_lambda:.3f}")
 
     t_tot = time() - t0
     print(f"t_tot = {t_tot:.3f}, t_sim = {t_sim}, t_int = {t_int:.3f}")

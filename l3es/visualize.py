@@ -25,8 +25,13 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
     """Scatter plot of the flow field
 
     Args:
+    Type 1:
         xyz (np.ndarray): Grid of shape (3, N, N, N) or (3, N, N, 1).
         u (np.ndarray): Flow field with shape (3, N, N, N) or (3, N, N, 1).
+    Type 2:
+        xyz (np.ndarray): Grid of shape (3, N) or (2, N).
+        u (np.ndarray): Flow field with shape (3, N) or (2, N).
+
         dx (float): Grid spacing.
         step (int): Current time step.
         field2 [key, value]: Additional field to plot.
@@ -36,13 +41,16 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
     x, y, z = xyz
 
     # x axis - bottom left, y axis - center, z axis - vertical
-    dim = 2 if u.shape[-1] == 1 else 3
+    assert xyz.shape == u.shape
+    is_type = 2 if xyz.ndim == 2 else 1
+    dim = 2 if (u.shape[-1] == 1 or u.shape[0] == 2) else 3
+    Nx = len(x) if is_type == 1 else int(len(x) ** (1 / dim))
     if dim == 3:
         projection = "3d"
         mask = (x > 2 * np.pi - 1.4 * dx) | (y < 1.4 * dx) | (z > 2 * np.pi - 1.4 * dx)
         xyz_ = (x[mask], y[mask], z[mask])
 
-        if field2 is None:
+        if field2 is None and is_type == 1:
             is_vorticity = True
             if is_vorticity:
                 field2 = ["vort", comp_vorticity_3d(u, dx)[0]]
@@ -50,6 +58,8 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
                 field2 = ["div", comp_divergence_3d(u, dx, version=2)[0]]
             vmins = [-u_ref, None, 0]
             vmaxs = [u_ref, None, u_ref]
+        elif field2 is None and is_type == 2:
+            raise NotImplementedError("With type 2, field2 must be specified.")
         else:
             vmins = [-u_ref, 0.95, 0]
             vmaxs = [u_ref, 1.05, u_ref]
@@ -63,7 +73,7 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
         xyz_ = (x, y)
         u = u.squeeze()
 
-        if field2 is None:
+        if field2 is None and is_type == 1:
             is_vorticity = True
             if is_vorticity:
                 field2 = ["vort", comp_vorticity(u, dx)]
@@ -71,6 +81,8 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
                 field2 = ["div", comp_divergence(u, dx, version=2)]
             vmins = [-u_ref, None, 0]
             vmaxs = [u_ref, None, u_ref]
+        elif field2 is None and is_type == 2:
+            raise NotImplementedError("With type 2, field2 must be specified.")
         else:
             vmins = [-u_ref, 0.95, 0]
             vmaxs = [u_ref, 1.05, u_ref]
@@ -78,7 +90,7 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
         labels = ["ux", field2[0], "|u|"]
         fields = [u[0], field2[1], np.linalg.norm(u, axis=0)]
 
-    size = 36 * (32 / x.shape[0]) ** 2
+    size = 36 * (32 / Nx) ** 2
 
     def subplot_i(ax, c, lbl, vmin, vmax):
         if c is None:
@@ -88,6 +100,10 @@ def plot_views(xyz, u, dx, step, field2=None, save_path=None, u_ref=4, suffix=""
         cmap = sns.color_palette("icefire", as_cmap=True) if lbl == "vort" else "turbo"
         ax.scatter(*xyz_, c=c[mask], cmap=cmap, s=size, vmin=vmin, vmax=vmax)
         ax.set_aspect("equal", "box")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        if dim == 3:
+            ax.set_zlabel("z")
         ax.set_title(f"{lbl} (min={c.min():.2f}, max={c.max():.2f})")
 
     # plot results
