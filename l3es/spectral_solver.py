@@ -172,7 +172,7 @@ def set_up_solver(
     len_z_vis = ckp_N if dim == 3 else 1
     fft_axes = (1, 2, 3) if dim == 3 else (1, 2)
 
-    # a = jnp.mgrid[:N, :N, :len_z].astype(float) * L / N  # (3,N,N,N)
+    # a = jnp.mgrid[:N, :N, :len_z].astype(float) * L / N  # (3,N,N,N) or (3,N,N,1)
     xyz = jnp.meshgrid(jnp.arange(N), jnp.arange(N), jnp.arange(len_z), indexing="ij")
     xyz = jnp.array(xyz) * L / N
     x = jnp.arange(ckp_N)
@@ -191,11 +191,11 @@ def set_up_solver(
     if case == "TGV3D":
         u = init_u_tgv(xyz[0], xyz[1], xyz[2])  # (3,N,N,N)
     elif case == "TGV2D":
-        u = init_u_tgv2d(N, target_dim=3, rescale=L)
+        u = init_u_tgv2d(N, target_dim=3, rescale=L)  # (3,N,N,1)
     elif case == "Kolm":
-        u = init_u_kolm(N, seed=seed, target_dim=3)
+        u = init_u_kolm(N, seed=seed, target_dim=3)  # (3,N,N,1)
     elif case == "HIT":
-        u = init_u_hit(N, seed)  # 7s at 256^3
+        u = init_u_hit(N, seed)  # (3,N,N,N); 7s at 256^3
 
     # rescale initial velocity to match target kinetic energy
     e_kin_init = 0.5 * jnp.mean(jnp.sum(u * u, axis=0))
@@ -284,8 +284,8 @@ def simulate(
         N, nu, dim, case, dt, seed, ckp_N, kf, e_kin_target, forcing_type, rejit
     )
 
-    dst_vis = os.path.join(dst_path, "ckp_vis")
-    dst_ckp = os.path.join(dst_path, "ckp")
+    dst_vis = os.path.join(dst_path, "sim_vis")
+    dst_ckp = os.path.join(dst_path, "sim")
     diagnostics_path = os.path.join(dst_path, "diagnostics.csv")
 
     with open(diagnostics_path, "w", newline="") as file:
@@ -337,7 +337,7 @@ def simulate(
             plot_views(
                 xyz_vis, u_ckp, L / ckp_N, i, "vort", save_path=dst_vis, u_ref=u_ref
             )
-            plot_e_k(u, i, save_path=dst_vis, dim=dim, ylims=(1e-8, 1e2))
+            plot_e_k(u, i, save_path=dst_vis, dim=dim)
         if i % ckp_freq == 0 and i >= burnin_steps:
             write_u(u, i, dst_ckp, ckp_N)
 

@@ -10,7 +10,7 @@ from jax_sph.jax_md import space
 
 from l3es.integrator import set_up_integrator, shift_fn
 from l3es.spectral_solver import comp_dt, set_up_solver
-from l3es.turbulence import ur_to_u_dft_wrapper, ur_to_u_mls_wrapper
+from l3es.turbulence import u_and_spectrum_from_ur
 from l3es.utils import spectral_filtering, write_u
 from l3es.visualize import plot_e_k, plot_views
 
@@ -79,8 +79,8 @@ def combined(
     )
     displacement_fn, _ = space.periodic(side=L * np.ones(dim))
     displacement_fn_sets = vmap(displacement_fn)
-    # accs = []
-    # u_r_old = jnp.zeros_like(r)
+    ugrid_from_ur = u_and_spectrum_from_ur(ckp_N, L, dim, fft_axes=fft_axes)
+
     t_sim, t_int, t0 = 0.0, 0.0, time()
     tstep_max = round(t_final / dt)
     burnin_steps = round(t_burnin / dt) if t_burnin > 0 else 0
@@ -116,12 +116,10 @@ def combined(
                 u_ref=u_ref,
                 suffix="_dns",
             )
-            plot_e_k(
-                u, i, save_path=vis_path, dim=dim, ylims=(1e-8, 1e2), suffix="_dns"
-            )
+            plot_e_k(u, i, save_path=vis_path, dim=dim, suffix="_dns")
 
         t_temp = time()
-        u_hres = u if dim == 3 else u[:2, :, :, 0]
+        u_hres = u if dim == 3 else u[:2, :, :, 0]  # (3,N,N,1) -> (2,N,N) if 2D
         assert ckp_N <= u.shape[1], "ckp_N must be less than or equal to N."
         assert (
             ckp_N % 2 == 0 and u.shape[1] % 2 == 0
@@ -174,12 +172,12 @@ def combined(
             # Reshape particles to the shape of the grid field to reuse plt_views.
             # The reason to stick to grid-shaped fields in the optional vorticity or
             # divergence computation wtihin plot_views.
-            r_vis = (r.T - 0.5 * L / ckp_N).reshape(*u_lres.shape)
-            u_vis = (u_r_0.T).reshape(*u_lres.shape)
-            if dim == 2:
+            r_vis = (r.T - 0.5 * L / ckp_N).reshape(*u_lres.shape)  # (3,N,N,N)|(2,N,N)
+            u_vis = (u_r_0.T).reshape(*u_lres.shape)  # (3,N,N,N)|(2,N,N)
+            if dim == 2:  # (2,N,N) -> (3,N,N,1)
                 r_vis = np.vstack([r_vis, np.zeros_like(r_vis[:1])])[:, :, :, None]
-                u_vis = u_vis[:, :, :, None]
-            rho_vis = (rho.T).reshape(*u_lres.shape[1:])
+                u_vis = np.vstack([u_vis, np.zeros_like(u_vis[:1])])[:, :, :, None]
+            rho_vis = rho.reshape(*u_lres.shape[1:])  # (Ntot,) -> (N,N,N)|(N,N)
             print("Plotting to ", vis_path)
             plot_views(
                 r_vis,
@@ -192,17 +190,10 @@ def combined(
                 suffix="_sph",
             )
             # Plot energy spectrum
-            is_dft_to_grid = False  # MLS works better!
-            if is_dft_to_grid:
-                u_grid = ur_to_u_dft_wrapper(ckp_N, L, dim, fft_axes)(r, u_r_0)
-            else:
-                u_grid = ur_to_u_mls_wrapper(ckp_N, L, dim)(r, u_r_0)
-            u_grid = np.asarray((u_grid.T).reshape(*u_lres.shape))
-            if dim == 2:
+            u_grid = np.asarray(ugrid_from_ur(r, u_r_0)[0]).reshape(*u_lres.shape)
+            if dim == 2:  # (2,N,N) -> (3,N,N,1)
                 u_grid = np.vstack([u_grid, np.zeros_like(u_grid[:1])])[:, :, :, None]
-            plot_e_k(
-                u_grid, i, save_path=vis_path, dim=dim, ylims=(1e-8, 1e2), suffix="_sph"
-            )
+            plot_e_k(u_grid, i, save_path=vis_path, dim=dim, suffix="_sph")
             print(f"Step {i}/{tstep_max} done.")
 
         r = shift_fn(r, dt * u_r)

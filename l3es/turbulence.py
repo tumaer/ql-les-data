@@ -15,6 +15,7 @@ from jax_sph.utils import pos_init_cartesian_2d, pos_init_cartesian_3d
 from numpy import array
 from scipy.spatial import KDTree
 
+from l3es.utils import energy_spectrum
 from l3es.visualize import plot_e_k, plot_views
 
 EPS = jnp.finfo(float).eps
@@ -338,6 +339,44 @@ def ur_to_u_dft_wrapper(N, L, dim=3, fft_axes=(1, 2, 3)):
     return body
 
 
+def u_and_spectrum_from_ur(
+    ckp_N,
+    L,
+    dim=3,
+    interp_backend="mls",
+    fft_axes=(1, 2, 3),
+):
+    """Interpolate particle velocity to a grid and compute its energy spectrum.
+
+    Args:
+        ckp_N (int): Number of grid points per direction.
+        L (float): Domain size.
+        dim (int): Dimension.
+        interp_backend (str): One of {"mls", "dft"}.
+        fft_axes (tuple): FFT axes for DFT interpolation.
+
+    Returns:
+        function: body(r, u_r) -> (u_grid, spectrum)
+            u_grid shape is (dim, ckp_N, ckp_N, ckp_N) for 3D,
+            and (dim, ckp_N, ckp_N, 1) for 2D.
+    """
+    if interp_backend == "dft":
+        interpolate = ur_to_u_dft_wrapper(ckp_N, L, dim, fft_axes)
+    else:
+        interpolate = ur_to_u_mls_wrapper(ckp_N, L, dim)
+
+    def body(r, u_r):
+        u_grid = interpolate(r, u_r)
+        if dim == 3:
+            u_grid = jnp.asarray((u_grid.T).reshape(dim, ckp_N, ckp_N, ckp_N))
+        else:
+            u_grid = jnp.asarray((u_grid.T).reshape(dim, ckp_N, ckp_N, 1))
+        ek = energy_spectrum(np.asarray(u_grid), dim=dim)
+        return u_grid, ek
+
+    return body
+
+
 if __name__ == "__main__":
     for step in [100, 1000]:
         N = 32
@@ -367,7 +406,7 @@ if __name__ == "__main__":
         u_grid = np.asarray((u_grid.T).reshape(3, N, N, N))
 
         # visualize
-        plot_e_k(u_grid, step, save_path=vis_path, dim=dim)
+        plot_e_k(u_grid, step, save_path=vis_path, dim=dim, ylims=(1e-4, 1e1))
         plot_views(r_grid, u_grid, L / N, step, "vort", save_path=vis_path, u_ref=u_ref)
         print("Done.")
 

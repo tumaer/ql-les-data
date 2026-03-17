@@ -95,8 +95,8 @@ def plot_views(xyz, u, dx, step, field2, save_path=None, u_ref=4, suffix=""):
         subplot_i(ax, c, lbl, vn, vx)
     fig.tight_layout(pad=2)
 
-    os.makedirs(save_path, exist_ok=True)
     if save_path:
+        os.makedirs(save_path, exist_ok=True)
         plt.savefig(os.path.join(save_path, f"step_{step}_view{suffix}.png"))
     else:
         plt.show()
@@ -104,7 +104,7 @@ def plot_views(xyz, u, dx, step, field2, save_path=None, u_ref=4, suffix=""):
     plt.close()
 
 
-def plot_e_k(u, step, save_path=None, dim=3, ylims=(1e-4, 1e1), suffix=""):
+def plot_e_k(u, step, save_path=None, dim=3, ylims=(1e-8, 1e2), suffix=""):
     """Plot energy spectrum.
 
     Args:
