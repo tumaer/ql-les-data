@@ -38,3 +38,5 @@ python main.py config=configs/hit32_1.yaml mode=combined seed=$seed \
 #     --skip_first_n_frames=0 --slice_every_nth_frame=1 \
 #     --src_dir=$DATA_ROOT/raw/3D_HIT_32768_20kevery1/ \
 #     --dst_dir=$DATA_ROOT/datasets/3D_HIT_32768_20kevery1/
+
+# python scripts/print_ds_stats.py --src=$DATA_ROOT/datasets/3D_HIT_32768_20kevery1

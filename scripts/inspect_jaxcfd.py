@@ -15,7 +15,10 @@ gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/decaying/eval_2048x2048
 """  # noqa: E501
 
 import argparse
+import os
 from pathlib import Path
+
+os.environ["JAX_PLATFORMS"] = "cpu"
 
 import jax_cfd.data as cfd_data
 import matplotlib.pyplot as plt
