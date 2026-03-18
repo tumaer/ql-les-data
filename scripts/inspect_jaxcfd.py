@@ -1,11 +1,18 @@
-"""Download public datasets from gresearch and analyze them."""
+"""Download public datasets from gresearch and analyze them.
 
-# Get validation data with:
-# gsutil ls 'gs://gresearch/jax-cfd/*'
-# gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/kolmogorov_re_1000/eval_64x64_64x64.nc content  # noqa: E501
-# gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/kolmogorov_re_1000/eval_2048x2048_64x64.nc content  # noqa: E501
-# gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/kolmogorov_re_1000/long_eval_2048x2048_64x64.nc content  # noqa: E501
-# gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/decaying/eval_2048x2048_64x64.nc content_decaying  # noqa: E501
+This script can also be applied to our own data generated with:
+`python main.py config=configs/kolm64_1.yaml mode=simulate`
+and then converted to NetCDF with:
+`python scripts/np2xarray.py --src=results/kolm64_1`
+Then just run `python scripts/inspect_jaxcfd.py --src=results/kolm64_1/trajs.nc`
+
+Get validation data with:
+gsutil ls 'gs://gresearch/jax-cfd/*'
+gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/kolmogorov_re_1000/eval_64x64_64x64.nc content
+gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/kolmogorov_re_1000/eval_2048x2048_64x64.nc content
+gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/kolmogorov_re_1000/long_eval_2048x2048_64x64.nc content
+gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/decaying/eval_2048x2048_64x64.nc content_decaying
+"""  # noqa: E501
 
 import argparse
 from pathlib import Path
@@ -216,11 +223,6 @@ if __name__ == "__main__":
         "--src", type=Path, default=Path("content_decaying/eval_2048x2048_64x64.nc")
     )
     args = parser.parse_args()
-    # This script can also be applied to our own data generated with:
-    # `python main.py config=configs/kolm64_1.yaml mode=simulate`
-    # and then converted to NetCDF with:
-    # `python scripts/np2xarray.py --src=results/kolm64_1`
-    # Then just run `python scripts/inspect_jaxcfd.py --src=results/kolm64_1/trajs.nc`
 
     fig_dir = args.src.parent / "figs"
     fig_dir.mkdir(parents=True, exist_ok=True)

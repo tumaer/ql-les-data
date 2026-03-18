@@ -3,6 +3,7 @@ venv*/
 data*
 .eggs/
 results*/
+results
 .vscode/
 __pycache__/
 *.pyc

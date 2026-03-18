@@ -24,7 +24,7 @@ def plot_views(xyz, u, dx, step):
     for i, (c, lbl) in enumerate(zip(fields, labels)):
         subplot_i(fig, i + 1, c, lbl)
 
-    plt.savefig(f"results/step_{step}.png")
+    plt.savefig(f"step_{step}.png")
 
 
 def init_u_tgv(x, y, z):
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         tstep += 1
         u, u_hat = integrate_fn(u, u_hat)
 
-    # plot_views(xyz, U, dx, tstep)
+    plot_views(xyz, u, dx, tstep)
     print("Time = {}".format(time() - t0))
 
     e_kin = 0.5 * np.mean(np.sum(u * u, axis=0))
