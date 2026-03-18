@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import h5py
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import yaml
 
 
@@ -70,3 +72,36 @@ def load_trajectories_com(ds_root: Path, every_nth_frame=20, max_trajs=8) -> dic
     trajectories["steps"] = steps
     trajectories["t"] = steps * dt
     return trajectories
+
+
+def plt_diagnostics_sim(ds_root: Path) -> None:
+    """Plot diagnostics evolution from a single mode=simulation csv."""
+    for key in ["e_inj", "ekin", "umax"]:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        df = pd.read_csv(ds_root / "diagnostics.csv")
+        ax.plot(df["time"], df[key])
+        ax.set_xlabel("Time [-]")
+        ax.set_ylabel(key)
+        ax.grid()
+        fig.tight_layout()
+        fig.savefig(ds_root / f"evolution_{key}.png")
+        plt.close()
+    print("Finished plt_diagnostics_sim !")
+
+
+def plt_diagnostics_com(ds_root, max_trajs=10, fig_dir=Path("figs")):
+    """Plot diagnostics evolution from a set of trajs with mode=combined."""
+    traj_dirs = _ls_sorted_trajs(ds_root)
+    (ds_root / fig_dir).mkdir(parents=True, exist_ok=True)
+    for key in ["e_inj", "ekin", "umax", "rho_max"]:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        for traj_dir in traj_dirs[:max_trajs]:
+            df = pd.read_csv(traj_dir / "diagnostics.csv")
+            ax.plot(df["time"], df[key])
+        ax.set_xlabel("Time [-]")
+        ax.set_ylabel(f"{key}")
+        ax.grid()
+        fig.tight_layout()
+        fig.savefig(ds_root / fig_dir / f"evolution_{key}.png")
+        plt.close()
+    print("Finished plt_diagnostics_com !")

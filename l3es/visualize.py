@@ -18,7 +18,7 @@ EPS = jnp.finfo(float).eps
 config.update("jax_enable_x64", True)
 
 # increase the font size in plots
-plt.rcParams.update({"font.size": 14})
+# plt.rcParams.update({"font.size": 14})
 
 
 def plot_views(xyz, u, dx, step, field2, save_path=None, u_ref=4, suffix=""):
@@ -123,9 +123,9 @@ def plot_e_k(u, step, save_path=None, dim=3, ylims=(1e-8, 1e2), suffix=""):
     ax.plot(k, ek[1:])
     ax.set_title("E(k) with k=(0, n]")
     if dim == 3:
-        ax.plot(k, k ** (-5 / 3), "--", c="k", label="k**(-5/3)")
+        ax.plot(k, k ** (-5 / 3), "--", c="k", label="k^(-5/3)")
     else:
-        ax.plot(k, k ** (-2.0), "--", c="k", label="k**(-2)")
+        ax.plot(k, k ** (-3.0), "--", c="k", label="k^(-3)")
 
     ax.grid()
     ax.set_xscale("log")

@@ -12,31 +12,16 @@ import h5py
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from matplotlib.colors import Normalize
-from utils import _ls_sorted_frames, _ls_sorted_trajs, load_trajectories_com
+from utils import (
+    _ls_sorted_frames,
+    _ls_sorted_trajs,
+    load_trajectories_com,
+    plt_diagnostics_com,
+)
 
 from l3es.turbulence import u_and_spectrum_from_ur
 from l3es.utils import energy_spectrum
-
-
-def plt_diagnostics(ds_root, max_trajs=10, fig_dir=Path("figs")):
-    """Plot the evolution of a given quantity."""
-
-    traj_dirs = _ls_sorted_trajs(ds_root)
-    (ds_root / fig_dir).mkdir(parents=True, exist_ok=True)
-    for key in ["e_inj", "ekin", "umax", "rho_max"]:
-        fig, ax = plt.subplots(figsize=(8, 4))
-        for traj_dir in traj_dirs[:max_trajs]:
-            df = pd.read_csv(traj_dir / "diagnostics.csv")
-            ax.plot(df["time"], df[key])
-        ax.set_xlabel("Time [-]")
-        ax.set_ylabel(f"{key}")
-        ax.grid()
-        fig.tight_layout()
-        fig.savefig(ds_root / fig_dir / f"evolution_{key}.png")
-        plt.close()
-    print("Finished plt_diagnostics !")
 
 
 def plot_visible_planes_3d(
@@ -194,7 +179,7 @@ def plt_spectrum_burnin_3d(path: Path, max_trajs=8):
     if n_grid is not None:
         ax.axvline(n_grid // 2, c="tab:orange", ls="--", label="N/2")
         ax.axvline(n_grid // 3, c="tab:green", ls="--", label="N/3")
-    ax.plot(k, k ** (-5 / 3), "--", c="k", label="k**(-5/3)")
+    ax.plot(k, k ** (-5 / 3), "--", c="k", label="k^(-5/3)")
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("Wavenumber k")
@@ -257,7 +242,7 @@ def plt_spectrum_points_3d(path: Path, max_trajs=6):
     if n_grid is not None:
         ax.axvline(n_grid // 2, c="tab:orange", ls="--", label="N/2")
         ax.axvline(n_grid // 3, c="tab:green", ls="--", label="N/3")
-    ax.plot(k_ref, k_ref ** (-5 / 3), "--", c="k", label="k**(-5/3)")
+    ax.plot(k_ref, k_ref ** (-5 / 3), "--", c="k", label="k^(-5/3)")
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("Wavenumber k")
@@ -280,7 +265,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_trajs", default=3, type=int, help="Max trajs to plot")
     args = parser.parse_args()
 
-    plt_diagnostics(args.src_dir, max_trajs=args.max_trajs, fig_dir=Path("figs"))
+    plt_diagnostics_com(args.src_dir, max_trajs=args.max_trajs, fig_dir=Path("figs"))
 
     traj_dirs = _ls_sorted_trajs(args.src_dir)[: args.max_trajs]
     for traj_dir in traj_dirs:

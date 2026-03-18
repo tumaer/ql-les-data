@@ -7,6 +7,7 @@
 # gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/kolmogorov_re_1000/long_eval_2048x2048_64x64.nc content  # noqa: E501
 # gsutil -m cp gs://gresearch/jax-cfd/public_eval_datasets/decaying/eval_2048x2048_64x64.nc content_decaying  # noqa: E501
 
+import argparse
 from pathlib import Path
 
 import jax_cfd.data as cfd_data
@@ -69,6 +70,7 @@ def plot_vorticity_frames(
     num_frames: int = 5,
     sample_index: int = 0,
     fig_dir: Path = Path("figs"),
+    frames="jaxcfd_paper",
 ) -> None:
     """Plots equidistant vorticity frames from a trajectory dataset.
 
@@ -98,9 +100,10 @@ def plot_vorticity_frames(
 
     total_steps = vorticity.sizes["time"]
     frame_count = min(num_frames, total_steps)
-    # frame_indices = np.linspace(0, total_steps - 1, num=frame_count, dtype=int, )
-    frame_indices = np.array([0, 80, 160, 210, total_steps - 1])  # From JAX-CFD paper
-    # frame_indices = np.array([0, 80, 100, 140, total_steps - 1])  # Example
+    if frames == "jaxcfd_paper":
+        frame_indices = np.array([0, 80, 160, 210, total_steps - 1])
+    else:
+        frame_indices = np.linspace(0, total_steps - 1, num=frame_count, dtype=int)
     # selected = vorticity.isel(time=frame_indices)
 
     fig, axes = plt.subplots(1, frame_count, figsize=(3 * frame_count, 3.5))
@@ -208,14 +211,24 @@ def plot_kinetic_energy_spectrum_at_time(
 
 
 if __name__ == "__main__":
-    dataset_path = Path("results/kolm64_1/trajs.nc")
-    fig_dir = Path("results/kolm64_1/figs")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--src", type=Path, default=Path("content_decaying/eval_2048x2048_64x64.nc")
+    )
+    args = parser.parse_args()
+    # This script can also be applied to our own data generated with:
+    # `python main.py config=configs/kolm64_1.yaml mode=simulate`
+    # and then converted to NetCDF with:
+    # `python scripts/np2xarray.py --src=results/kolm64_1`
+    # Then just run `python scripts/inspect_jaxcfd.py --src=results/kolm64_1/trajs.nc`
+
+    fig_dir = args.src.parent / "figs"
     fig_dir.mkdir(parents=True, exist_ok=True)
-    print_dataset_shapes(dataset_path)
-    ds = xarray_open(dataset_path)
+    print_dataset_shapes(args.src)
+    ds = xarray_open(args.src)
     plt_u_max_per_timestep(ds, fig_dir=fig_dir)
-    for i in range(3):
+    for i in range(1):  # up to number of trajectories in the dataset
         plot_vorticity_frames(ds, num_frames=5, sample_index=i, fig_dir=fig_dir)
     plt_ekin_evolution(ds, fig_dir=fig_dir)
     plot_kinetic_energy_spectrum_at_time(ds, time_index=0, fig_dir=fig_dir)
-    plot_kinetic_energy_spectrum_at_time(ds, time_index=200, fig_dir=fig_dir)
+    plot_kinetic_energy_spectrum_at_time(ds, time_index=99999, fig_dir=fig_dir)

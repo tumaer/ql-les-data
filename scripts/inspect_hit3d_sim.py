@@ -10,27 +10,11 @@ os.environ["JAX_PLATFORMS"] = "cpu"
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from inspect_hit3d_com import plot_visible_planes_3d
 from matplotlib.colors import Normalize
-from utils import _ls_sorted_frames, _step_from_filename
+from utils import _ls_sorted_frames, _step_from_filename, plt_diagnostics_sim
 
 from l3es.utils import energy_spectrum
-
-
-def plt_raw_diagnostics(ds_root: Path) -> None:
-    """Plot diagnostics evolution from a single simulation csv."""
-    for key in ["e_inj", "ekin", "umax"]:
-        fig, ax = plt.subplots(figsize=(8, 4))
-        df = pd.read_csv(ds_root / "diagnostics.csv")
-        ax.plot(df["time"], df[key])
-        ax.set_xlabel("Time [-]")
-        ax.set_ylabel(key)
-        ax.grid()
-        fig.tight_layout()
-        fig.savefig(ds_root / f"evolution_{key}.png")
-        plt.close()
-    print("Finished plt_raw_diagnostics !")
 
 
 def plt_spectrum_over_time(ds_root: Path, n_ckp=5) -> None:
@@ -53,7 +37,7 @@ def plt_spectrum_over_time(ds_root: Path, n_ckp=5) -> None:
     n = len(k)
     ax.axvline(n // 2, c="tab:orange", ls="--", label="N/2")
     ax.axvline(n // 3, c="tab:green", ls="--", label="N/3")
-    ax.plot(k, k ** (-5 / 3), "--", c="k", label="k**(-5/3)")
+    ax.plot(k, k ** (-5 / 3), "--", c="k", label="k^(-5/3)")
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("Wavenumber k")
@@ -128,6 +112,6 @@ if __name__ == "__main__":
     parser.add_argument("--src_dir", default=Path("results/hit32_1"), type=Path)
     args = parser.parse_args()
     ds_root = args.src_dir
-    plt_raw_diagnostics(ds_root)
+    plt_diagnostics_sim(ds_root)
     plt_spectrum_over_time(ds_root)
     animate_field_over_time(ds_root)

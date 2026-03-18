@@ -1,39 +1,47 @@
+"""Convert a custom simulation to a NetCDF file compatible with xarray.
+The requirement is that the simulation is ran using main.py with mode=simulate.
+"""
+import argparse
 import os
+from pathlib import Path
 
 import numpy as np
 import xarray
 import yaml
 
-with open("results/kolm64_1/config.yaml", "r") as f:
-    meta = yaml.load(f, Loader=yaml.FullLoader)
 
-burnin = 65  # 65
-trajs = 3  # 3
+def custom_dataset_to_netcdf(dataset_root: Path, L=2 * np.pi, Nx=64) -> None:
+    """Converts single simulation trajectory to NetCDF file compatible with xarray."""
+    with open(dataset_root / "config.yaml", "r") as f:
+        meta = yaml.load(f, Loader=yaml.FullLoader)
 
-n_times = len(os.listdir("results/kolm64_1/ckp")) - burnin
-u = np.zeros((2, trajs, n_times, 64, 64))  # (Dim, Trajs, Time, X, Y)
+    n_times = len(os.listdir(dataset_root / "sim"))
+    u = np.zeros((2, 1, n_times, Nx, Nx))  # (Dim, Trajs, Time, X, Y)
 
-sample = np.arange(trajs)
-# sample = np.array([0, 2])
-for i, s in enumerate(sample):
-    files = os.listdir(f"results/kolm64_{s+1}/ckp")
+    files = os.listdir(dataset_root / "sim")
     files.sort()
-    files = files[burnin:]  # burn-in period of t=4.5 and ckp_dt=0.07
+    files = files
     for j, f in enumerate(files):
-        u[:, i, j] = np.load(f"results/kolm64_{s+1}/ckp/" + f)  # (2,64,64)
+        u[:, 0, j] = np.load(dataset_root / "sim" / f)  # (2,64,64)
 
-time = np.arange(len(files)) * meta["sim"]["dt"] * meta["sim"]["ckp_freq"]
-x = y = (np.arange(64) + 0.5) * 2 * np.pi / 64
-# print(time.shape, x.shape, y.shape, u.shape)
-# print(time[:5], x[:5], y[:5], u[0, :5, :5])
+    time = np.arange(len(files)) * meta["sim"]["dt"] * meta["sim"]["ckp_freq"]
+    x = y = (np.arange(Nx) + 0.5) * L / Nx
 
-ds = xarray.Dataset(
-    data_vars={
-        "u": (("sample", "time", "x", "y"), u[0]),
-        "v": (("sample", "time", "x", "y"), u[1]),
-    },
-    coords={"sample": np.arange(len(sample)), "time": time, "x": x, "y": y},
-    attrs={"description": "Synthetic dataset for testing"},
-)
-print(f"Dataset: \n{ds}")
-ds.to_netcdf("results/kolm64_1/trajs.nc")
+    ds = xarray.Dataset(
+        data_vars={
+            "u": (("sample", "time", "x", "y"), u[0]),
+            "v": (("sample", "time", "x", "y"), u[1]),
+        },
+        coords={"sample": np.arange(1), "time": time, "x": x, "y": y},
+        attrs={"description": "Synthetic dataset for testing"},
+    )
+    print(f"Dataset: \n{ds}")
+    ds.to_netcdf(dataset_root / "trajs.nc")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--src", type=Path, default=Path("results/kolm64_1"))
+    args = parser.parse_args()
+
+    custom_dataset_to_netcdf(args.src)

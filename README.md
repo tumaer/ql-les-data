@@ -1,20 +1,13 @@
 # Learned Lagrangian LES
 
 **This code contains:**
-
-- [x] Spectral HIT solver. Based on https://github.com/spectralDNS/spectralDNS
-- [ ] Set up case
-    - [ ] CBC initial conditions
-    - [ ] forced turbulence
-    - [ ] enforce Re_lambda, see https://www.sto.nato.int/publications/AGARD/AGARD-AR-345/AGARD-AR-345.pdf
-- [x] Evolution of SPH particles following spectral dynamics
-    - [x] start integrating from a relaxed state
-    - [ ] integrate solver into particle evolution and make smaller time steps, e.g. 0.1dt
-- [ ] Dataset generation utils
-- [ ] Evaluation metrics
-    - [x] Jonas' MLS interpolation
-    - [x] direct DFT on points to compute spectrum
-    - [ ] density evaluation
+* SpectralDNS solver in JAX, with example configs:
+    * 2D/3D decaying Taylor-Green vortex
+    * 2D Kolmogorov flow, see [JAX-CFD](https://www.pnas.org/content/118/21/e2101784118)
+    * 3D Homogeneous Isotropic Turbulence (HIT) with or without forcing
+* Utilities to relax Smoothed Particle Hydrodynamics (SPH) particles based on JAX-SPH
+* Utilities to evolve SPH particles in parallel to the SpectralDNS solver
+* Utilities to generate datasets compatible with LagrangeBench
 
 ## Install
 
@@ -24,22 +17,21 @@ source .venv/bin/activate
 pip install "jax[cuda12]==0.4.29"
 ```
 
-## Run
+## Getting Started
 
-Validation run with reference kinetic energy after 10 steps.
-
+* Validation run with reference kinetic energy after 10 steps.
 ```bash
 python main.py config=configs/tgv_validate.yaml
 ```
 
-To generate a dataset of 32^3 particles, we run spectral DNS on 128^3 and spectrally coarsen to 32^3.
-
+* To generate an HIT dataset with $32^3$ particles, we run spectral DNS on a $256^3$ grid and spectrally coarsen/filter to $32^3$.
 ```bash
 python main.py config=configs/hit.yaml
 ```
 
-For higher quality, run the following.
+## Datasets
 
-```bash
-nohup bash run.sh >> hit_192_5_0002.out 2>&1 &
-```
+The two datasets used in the paper can be regenerated with the following scripts:
+* `sbatch gen_dataset/slurm_kolm2d_64_1.sh` - 80 min/traj X 20 trajs
+* `sbatch gen_dataset/slurm_hit3d_32_1.sh` - 60 min/traj X 20 trajs
+> At the bottom of these scripts are the commands to convert the simulations into a dataset file.
