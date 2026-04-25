@@ -26,7 +26,7 @@ python gen_dataset/jaxsph_main.py config=jaxsph_cases/rlx.yaml seed=$seed case.d
 
 python main.py config=configs/hit32_1.yaml mode=combined seed=$seed \
     com.state_0_path=$DATA_ROOT/data_relaxed/rlx_3_0.1963495408_${seed}.h5 \
-    com.dst_path=$DATA_ROOT/raw/3D_HIT_32768_20kevery1/traj_${seed}
+    com.dst_path=$DATA_ROOT/raw/3D_HIT_32768_25kevery1/traj_${seed}
 
 ### After trajectory simulation:
 
@@ -36,7 +36,13 @@ python main.py config=configs/hit32_1.yaml mode=combined seed=$seed \
 # 2. Create dataset from trajectories
 # python gen_dataset/gen_dataset.py --split=2_1_1 \
 #     --skip_first_n_frames=0 --slice_every_nth_frame=1 \
-#     --src_dir=$DATA_ROOT/raw/3D_HIT_32768_20kevery1/ \
-#     --dst_dir=$DATA_ROOT/datasets/3D_HIT_32768_20kevery1/
+#     --src_dir=$DATA_ROOT/raw/3D_HIT_32768_25kevery1/ \
+#     --dst_dir=$DATA_ROOT/datasets/3D_HIT_32768_25kevery1/
 
-# python scripts/print_ds_stats.py --src=$DATA_ROOT/datasets/3D_HIT_32768_20kevery1
+# python scripts/print_ds_stats.py --src=$DATA_ROOT/datasets/3D_HIT_32768_25kevery1
+
+# Compute statistics for training on every 10th frame. Doesn't create a dataset.
+# python gen_dataset/gen_dataset.py --split=2_1_1 \
+#     --skip_first_n_frames=0 --slice_every_nth_frame=1 \
+#     --dst_dir=$DATA_ROOT/datasets/3D_HIT_32768_25kevery1/ \
+#     --stats_every_nth=10 --only_stats

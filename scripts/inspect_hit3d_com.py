@@ -260,7 +260,7 @@ def plt_spectrum_points_3d(path: Path, max_trajs=6):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--src_dir", default=Path("dataset_hit/raw/3D_HIT_32768_20kevery1"), type=Path
+        "--src_dir", default=Path("dataset_hit/raw/3D_HIT_32768_25kevery1"), type=Path
     )
     parser.add_argument("--max_trajs", default=3, type=int, help="Max trajs to plot")
     args = parser.parse_args()

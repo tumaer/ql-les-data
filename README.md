@@ -32,6 +32,6 @@ python main.py config=configs/hit.yaml
 ## Datasets
 
 The two datasets used in the paper can be regenerated with the following scripts:
-* `sbatch gen_dataset/slurm_kolm2d_64_1.sh` - 80 min/traj X 20 trajs
-* `sbatch gen_dataset/slurm_hit3d_32_1.sh` - 60 min/traj X 20 trajs
+* `sbatch gen_dataset/slurm_kolm2d_64_1.sh` - 80 min/traj x 20 trajs
+* `sbatch gen_dataset/slurm_hit3d_32_1.sh` - 60 min/traj x 20 trajs
 > At the bottom of these scripts are the commands to convert the simulations into a dataset file.
