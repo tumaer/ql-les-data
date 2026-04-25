@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "L3ES"
-version = "0.0.0a0"
+version = "0.1.0"
 description = "Learned Lagrangian LES"
 authors = ["Artur Toshev <artur.toshev@tum.de>"]
 license = "MIT"

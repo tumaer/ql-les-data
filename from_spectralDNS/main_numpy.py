@@ -1,3 +1,6 @@
+"""JAX version of the 3D TGV spectral DNS solver example from:
+https://github.com/spectralDNS/spectralDNS/blob/master/spectralDNS3D_short.py
+"""
 from time import time
 
 import matplotlib.pyplot as plt
