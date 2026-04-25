@@ -1,4 +1,4 @@
-# Learned Lagrangian LES
+# Dataset Generation Code for *Data-Driven Discretizations of Quasi-Lagrangian Turbulence*
 
 **This code contains:**
 * SpectralDNS solver in JAX, with example configs:
